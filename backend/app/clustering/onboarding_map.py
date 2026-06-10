@@ -134,7 +134,7 @@ def intent_to_onboarding_answers(intent: dict) -> dict:
     """
     answers = {"genre": "any", "length": "any", "era": "any", "tone": "any", "popularity": "any"}
 
-    for mood in intent.get("mood", []):
+    for mood in (intent.get("mood") or []):
         if mood in MOOD_TO_TONE:
             answers["tone"] = MOOD_TO_TONE[mood]
             break

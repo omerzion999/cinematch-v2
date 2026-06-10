@@ -79,3 +79,10 @@ def test_intent_to_onboarding_answers_trending_maps_to_well_known():
     intent = {"mood": [], "length_pref": "any", "era_pref": "any", "popularity_pref": "trending"}
     answers = intent_to_onboarding_answers(intent)
     assert answers["popularity"] == "well_known"
+
+
+def test_intent_to_onboarding_answers_mood_null_doesnt_crash():
+    intent = {"mood": None, "length_pref": "any", "era_pref": "any", "popularity_pref": "any"}
+    answers = intent_to_onboarding_answers(intent)
+    assert answers["tone"] == "any"
+    assert answers == {"genre": "any", "length": "any", "era": "any", "tone": "any", "popularity": "any"}
