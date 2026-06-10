@@ -49,8 +49,17 @@ def build_cluster_features(catalog: pd.DataFrame) -> pd.DataFrame:
     out["start_year_z"] = catalog["start_year_z"].fillna(0.0).astype(np.float32).values
 
     num_seasons = pd.to_numeric(catalog["num_seasons"], errors="coerce")
-    num_seasons = num_seasons.fillna(num_seasons.median())
+    median = num_seasons.median()
+    # Guard against all-NaN case: if median is NaN, use 0.0 as fallback
+    if np.isnan(median):
+        median = 0.0
+    num_seasons = num_seasons.fillna(median)
     mean, std = num_seasons.mean(), num_seasons.std()
+    # Guard against zero std (e.g., single row or all identical values)
+    if not std or np.isnan(std):
+        std = 1.0
+    if np.isnan(mean):
+        mean = 0.0
     out["num_seasons_z"] = ((num_seasons - mean) / std).astype(np.float32).values
 
     return out
