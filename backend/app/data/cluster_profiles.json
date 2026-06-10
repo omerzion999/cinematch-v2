@@ -1,0 +1,98 @@
+{
+  "0": {
+    "label_he": "אנימציה וקומדיה",
+    "label_en": "Animation & Comedy",
+    "size": 1328,
+    "top_genres": [
+      "Animation",
+      "Comedy"
+    ],
+    "avg_rating": 7.53,
+    "avg_start_year": 2013.5,
+    "avg_binge_fit_score": 3.78
+  },
+  "1": {
+    "label_he": "דרמה וקומדיה",
+    "label_en": "Drama & Comedy",
+    "size": 2960,
+    "top_genres": [
+      "Drama",
+      "Comedy"
+    ],
+    "avg_rating": 7.07,
+    "avg_start_year": 2016.4,
+    "avg_binge_fit_score": 3.72
+  },
+  "2": {
+    "label_he": "קומדיה ודוקומנטרי קלאסיות",
+    "label_en": "Comedy & Documentary classic",
+    "size": 320,
+    "top_genres": [
+      "Comedy",
+      "Documentary"
+    ],
+    "avg_rating": 6.75,
+    "avg_start_year": 2003.2,
+    "avg_binge_fit_score": 3.02
+  },
+  "3": {
+    "label_he": "קומדיה ודרמה קלאסיות",
+    "label_en": "Comedy & Drama classic",
+    "size": 1195,
+    "top_genres": [
+      "Comedy",
+      "Drama"
+    ],
+    "avg_rating": 7.35,
+    "avg_start_year": 1982.7,
+    "avg_binge_fit_score": 3.25
+  },
+  "4": {
+    "label_he": "דרמה וקומדיה",
+    "label_en": "Drama & Comedy",
+    "size": 1435,
+    "top_genres": [
+      "Drama",
+      "Comedy"
+    ],
+    "avg_rating": 7.09,
+    "avg_start_year": 2014.8,
+    "avg_binge_fit_score": 5.66
+  },
+  "5": {
+    "label_he": "דוקומנטרי ודרמה קלאסיות",
+    "label_en": "Documentary & Drama classic",
+    "size": 71,
+    "top_genres": [
+      "Documentary",
+      "Drama"
+    ],
+    "avg_rating": 6.51,
+    "avg_start_year": 1982.8,
+    "avg_binge_fit_score": 2.63
+  },
+  "6": {
+    "label_he": "דרמה וקומדיה",
+    "label_en": "Drama & Comedy",
+    "size": 2414,
+    "top_genres": [
+      "Drama",
+      "Comedy"
+    ],
+    "avg_rating": 8.26,
+    "avg_start_year": 2014.3,
+    "avg_binge_fit_score": 4.98
+  },
+  "7": {
+    "label_he": "קומדיה ודרמה",
+    "label_en": "Comedy & Drama",
+    "size": 1290,
+    "top_genres": [
+      "Comedy",
+      "Drama"
+    ],
+    "avg_rating": 5.68,
+    "avg_start_year": 2012.6,
+    "avg_binge_fit_score": 3.01
+  }
+}
