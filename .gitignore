@@ -1,0 +1,15 @@
+.claude/
+.worktrees/
+
+# Node
+node_modules/
+dist/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Environment files
+.env
