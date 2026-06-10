@@ -1,6 +1,15 @@
 import numpy as np
+import pytest
 
 from app.engine import anomaly
+
+
+@pytest.fixture(autouse=True)
+def reset_anomaly_state():
+    """Reset anomaly module global state before and after each test."""
+    anomaly._threshold = None
+    yield
+    anomaly._threshold = None
 
 
 def test_calibrate_sets_threshold_to_percentile():
