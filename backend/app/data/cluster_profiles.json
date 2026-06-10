@@ -25,7 +25,7 @@
   },
   "2": {
     "label_he": "קומדיה ודוקומנטרי קלאסיות",
-    "label_en": "Comedy & Documentary classic",
+    "label_en": "Classic Comedy & Documentary",
     "size": 320,
     "top_genres": [
       "Comedy",
@@ -37,7 +37,7 @@
   },
   "3": {
     "label_he": "קומדיה ודרמה קלאסיות",
-    "label_en": "Comedy & Drama classic",
+    "label_en": "Classic Comedy & Drama",
     "size": 1195,
     "top_genres": [
       "Comedy",
@@ -61,7 +61,7 @@
   },
   "5": {
     "label_he": "דוקומנטרי ודרמה קלאסיות",
-    "label_en": "Documentary & Drama classic",
+    "label_en": "Classic Documentary & Drama",
     "size": 71,
     "top_genres": [
       "Documentary",

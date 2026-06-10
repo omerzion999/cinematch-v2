@@ -95,7 +95,9 @@ def build_cluster_profiles(features: pd.DataFrame, catalog: pd.DataFrame, labels
         label_en = " & ".join(GENRE_LABELS[g]["en"] for g in top_genres)
         if era_he:
             label_he = f"{label_he} {era_he}"
-        if era_en:
+        if era_en == "classic":
+            label_en = f"Classic {label_en}"
+        elif era_en:
             label_en = f"{label_en} {era_en}"
 
         profiles[str(int(cluster_id))] = {
