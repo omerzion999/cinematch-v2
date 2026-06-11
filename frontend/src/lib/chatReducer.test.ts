@@ -7,6 +7,7 @@ import {
   type RecommendationsMessage,
   type TextMessage,
 } from "./chatReducer";
+import { UI_STRINGS } from "./i18n";
 import { ONBOARDING_QUESTIONS } from "./onboarding";
 import type { RecCard } from "./types";
 
@@ -206,14 +207,19 @@ describe("chatReducer", () => {
     expect(last.content).toBe("שגיאה זמנית");
   });
 
-  it("TOGGLE_LANG flips between he and en", () => {
+  it("TOGGLE_LANG flips between he and en and restarts the conversation in that language", () => {
     const state = createInitialState("he");
 
     const next = chatReducer(state, { type: "TOGGLE_LANG" });
     expect(next.lang).toBe("en");
+    expect(next.phase).toBe("intro");
+    const nextGreeting = next.messages[0] as ChoiceMessage;
+    expect(nextGreeting.prompt).toBe(UI_STRINGS.en.openingMessage);
 
     const back = chatReducer(next, { type: "TOGGLE_LANG" });
     expect(back.lang).toBe("he");
+    const backGreeting = back.messages[0] as ChoiceMessage;
+    expect(backGreeting.prompt).toBe(UI_STRINGS.he.openingMessage);
   });
 
   it("RESTORE replaces the entire state (used to load persisted state)", () => {
