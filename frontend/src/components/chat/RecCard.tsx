@@ -20,7 +20,10 @@ export function RecCard({ show, lang, onClick }: RecCardProps) {
       tabIndex={0}
       onClick={() => onClick(show.title)}
       onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") onClick(show.title);
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick(show.title);
+        }
       }}
       className="w-40 shrink-0 cursor-pointer overflow-hidden transition hover:shadow-md"
     >
