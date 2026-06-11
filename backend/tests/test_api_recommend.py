@@ -64,3 +64,47 @@ def test_recommend_no_picks_in_a_cluster_returns_no_recommendations_message(clie
     body = response.json()
     assert body["recommendations"] == []
     assert body["intro"]
+
+
+def test_clean_poster_path_normalizes_nan_and_empty_strings():
+    import math
+
+    from app.routers.recommend import _clean_poster_path
+
+    assert _clean_poster_path(math.nan) is None
+    assert _clean_poster_path("") is None
+    assert _clean_poster_path("/abc123.jpg") == "/abc123.jpg"
+
+
+def test_resolve_poster_path_prefers_catalog_value(monkeypatch):
+    import app.routers.recommend as recommend_module
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("search_tv_show should not be called when catalog has a poster_path")
+
+    monkeypatch.setattr(recommend_module, "search_tv_show", fail_if_called)
+
+    pick = {"title": "Breaking Bad", "poster_path": "/catalog.jpg", "start_year": 2008}
+    assert recommend_module._resolve_poster_path(pick) == "/catalog.jpg"
+
+
+def test_resolve_poster_path_falls_back_to_tmdb_when_catalog_value_missing(monkeypatch):
+    import app.routers.recommend as recommend_module
+
+    monkeypatch.setattr(
+        recommend_module,
+        "search_tv_show",
+        lambda title, year=None: {"poster_path": "/from-tmdb.jpg"},
+    )
+
+    pick = {"title": "Dead to Me", "poster_path": "", "start_year": 2019}
+    assert recommend_module._resolve_poster_path(pick) == "/from-tmdb.jpg"
+
+
+def test_resolve_poster_path_returns_none_when_tmdb_has_no_match(monkeypatch):
+    import app.routers.recommend as recommend_module
+
+    monkeypatch.setattr(recommend_module, "search_tv_show", lambda title, year=None: None)
+
+    pick = {"title": "Dead to Me", "poster_path": "", "start_year": 2019}
+    assert recommend_module._resolve_poster_path(pick) is None

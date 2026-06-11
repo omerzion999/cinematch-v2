@@ -25,7 +25,7 @@ export function RecCard({ show, lang, onClick }: RecCardProps) {
           onClick(show.title);
         }
       }}
-      className="w-40 shrink-0 cursor-pointer overflow-hidden transition hover:shadow-md"
+      className="w-40 shrink-0 cursor-pointer overflow-hidden transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10"
     >
       {show.poster_path ? (
         <img
@@ -41,7 +41,7 @@ export function RecCard({ show, lang, onClick }: RecCardProps) {
       <CardContent className="space-y-1 p-2" dir={lang === "he" ? "rtl" : "ltr"}>
         <p className="truncate text-sm font-semibold">{show.title}</p>
         <p className="truncate text-xs text-muted-foreground">{show.genres}</p>
-        <Badge variant="secondary">
+        <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
           {strings.ratingLabel}: {show.rating.toFixed(1)}
         </Badge>
       </CardContent>

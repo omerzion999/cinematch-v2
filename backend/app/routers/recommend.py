@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.agent.explanations import explain_picks
+from app.agent.tmdb import search_tv_show
 from app.clustering.onboarding_map import build_user_vector
 from app.clustering.recommend import nearest_cluster, recommend_from_cluster
 from app.i18n import t
@@ -53,6 +54,27 @@ def _nan_to_none(value):
     return None if pd.isna(value) else value
 
 
+def _clean_poster_path(value) -> str | None:
+    """Normalize a catalog/TMDB poster_path: NaN and empty strings become None."""
+    if pd.isna(value):
+        return None
+    value = str(value).strip()
+    return value or None
+
+
+def _resolve_poster_path(pick: dict) -> str | None:
+    """Use the catalog's poster_path if present, otherwise look it up on TMDB."""
+    poster_path = _clean_poster_path(pick.get("poster_path"))
+    if poster_path:
+        return poster_path
+
+    year = _nan_to_none(pick.get("start_year"))
+    result = search_tv_show(pick["title"], year=int(year) if year else None)
+    if result:
+        return _clean_poster_path(result.get("poster_path"))
+    return None
+
+
 @router.post("/api/recommend", response_model=RecommendResponse)
 def recommend(payload: RecommendRequest, request: Request) -> RecommendResponse:
     state = request.app.state.cinematch
@@ -86,7 +108,7 @@ def recommend(payload: RecommendRequest, request: Request) -> RecommendResponse:
             genres=pick["genres"],
             rating=0.0 if pd.isna(pick["rating"]) else float(pick["rating"]),
             overview=pick["overview"],
-            poster_path=_nan_to_none(pick.get("poster_path")),
+            poster_path=_resolve_poster_path(pick),
             decade_str=pick["decade_str"],
             num_seasons=_nan_to_none(pick.get("num_seasons")),
             binge_fit_score=float(pick["binge_fit_score"]),
