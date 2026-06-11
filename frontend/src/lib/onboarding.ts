@@ -1,17 +1,17 @@
 import type { OnboardingAnswers } from "./types";
 
-export interface OnboardingOption {
-  value: string;
+export interface OnboardingOption<K extends keyof OnboardingAnswers = keyof OnboardingAnswers> {
+  value: OnboardingAnswers[K];
   label: { he: string; en: string };
 }
 
-export interface OnboardingQuestion {
-  id: keyof OnboardingAnswers;
+export interface OnboardingQuestion<K extends keyof OnboardingAnswers = keyof OnboardingAnswers> {
+  id: K;
   prompt: { he: string; en: string };
-  options: OnboardingOption[];
+  options: OnboardingOption<K>[];
 }
 
-export const ONBOARDING_QUESTIONS: OnboardingQuestion[] = [
+export const ONBOARDING_QUESTIONS: { [K in keyof OnboardingAnswers]: OnboardingQuestion<K> }[keyof OnboardingAnswers][] = [
   {
     id: "genre",
     prompt: {

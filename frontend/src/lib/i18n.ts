@@ -19,7 +19,7 @@ export const UI_STRINGS: Record<Lang, Record<string, string>> = {
     trailerLabel: "טריילר",
     closeModal: "סגור",
     detailsLoading: "טוען פרטים נוספים...",
-    genericError: "מצטערים, קרתה תקלה. נסו שוב מאוחר יותר.",
+    genericError: "מצטערים, קרתה תקלה. נסה שוב מאוחר יותר.",
   },
   en: {
     openingMessage:
