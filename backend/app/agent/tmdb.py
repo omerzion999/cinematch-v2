@@ -14,6 +14,27 @@ TMDB_BASE_URL = "https://api.themoviedb.org/3"
 _TIMEOUT = 5
 
 
+def _get(path: str, api_key: str, params: dict):
+    """
+    Calls the TMDB API, authenticating with either a v3 API key (sent as the
+    `api_key` query param) or a v4 read access token (sent as a Bearer
+    header). TMDB's settings page issues both formats and it's a common
+    mistake to copy the wrong one, so both are accepted here.
+    """
+    if "." in api_key:
+        return requests.get(
+            f"{TMDB_BASE_URL}{path}",
+            params=params,
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=_TIMEOUT,
+        )
+    return requests.get(
+        f"{TMDB_BASE_URL}{path}",
+        params={**params, "api_key": api_key},
+        timeout=_TIMEOUT,
+    )
+
+
 def search_tv_show(title: str, year: int | None = None) -> dict | None:
     """
     Searches TMDB for a TV show by title (and optional first-air-date year).
@@ -24,12 +45,12 @@ def search_tv_show(title: str, year: int | None = None) -> dict | None:
     if not api_key:
         return None
 
-    params = {"api_key": api_key, "query": title}
+    params = {"query": title}
     if year:
         params["first_air_date_year"] = year
 
     try:
-        resp = requests.get(f"{TMDB_BASE_URL}/search/tv", params=params, timeout=_TIMEOUT)
+        resp = _get("/search/tv", api_key, params)
         resp.raise_for_status()
         results = resp.json().get("results", [])
     except Exception:
@@ -50,9 +71,9 @@ def get_tv_show_details(tmdb_id: int) -> dict | None:
     if not api_key:
         return None
 
-    params = {"api_key": api_key, "append_to_response": "videos,credits,watch/providers"}
+    params = {"append_to_response": "videos,credits,watch/providers"}
     try:
-        resp = requests.get(f"{TMDB_BASE_URL}/tv/{tmdb_id}", params=params, timeout=_TIMEOUT)
+        resp = _get(f"/tv/{tmdb_id}", api_key, params)
         resp.raise_for_status()
         return resp.json()
     except Exception:

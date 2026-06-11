@@ -116,7 +116,10 @@ export function ChatWindow() {
               }
             })}
             {isLoading && (
-              <div className="flex w-full justify-start">
+              <div
+                dir="ltr"
+                className={`flex w-full ${state.lang === "he" ? "justify-end" : "justify-start"}`}
+              >
                 <div className="rounded-2xl border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
                   {strings.processing}
                 </div>

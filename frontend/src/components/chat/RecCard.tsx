@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { UI_STRINGS } from "@/lib/i18n";
@@ -13,6 +14,7 @@ interface RecCardProps {
 
 export function RecCard({ show, lang, onClick }: RecCardProps) {
   const strings = UI_STRINGS[lang];
+  const [imgError, setImgError] = useState(false);
 
   return (
     <Card
@@ -27,11 +29,12 @@ export function RecCard({ show, lang, onClick }: RecCardProps) {
       }}
       className="w-40 shrink-0 cursor-pointer overflow-hidden transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10"
     >
-      {show.poster_path ? (
+      {show.poster_path && !imgError ? (
         <img
           src={`${TMDB_POSTER_BASE}${show.poster_path}`}
           alt={show.title}
           className="h-56 w-full object-cover"
+          onError={() => setImgError(true)}
         />
       ) : (
         <div className="flex h-56 w-full items-center justify-center bg-muted p-2 text-center text-sm text-muted-foreground">

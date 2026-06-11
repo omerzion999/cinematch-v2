@@ -35,7 +35,7 @@
     min-height: 100vh;
     background-color: hsl(var(--background));
     background-image:
-      linear-gradient(180deg, hsl(var(--background) / 0.92), hsl(var(--background) / 0.97)),
+      linear-gradient(180deg, hsl(var(--background) / 0.45), hsl(var(--background) / 0.7)),
       url("/background.png");
     background-size: cover;
     background-position: center;

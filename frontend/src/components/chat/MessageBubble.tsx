@@ -9,9 +9,10 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ message, lang }: MessageBubbleProps) {
   const isUser = message.role === "user";
+  const alignEnd = lang === "he" ? !isUser : isUser;
 
   return (
-    <div className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}>
+    <div dir="ltr" className={cn("flex w-full", alignEnd ? "justify-end" : "justify-start")}>
       <div
         dir={lang === "he" ? "rtl" : "ltr"}
         className={cn(

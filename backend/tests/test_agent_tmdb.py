@@ -48,6 +48,21 @@ def test_search_tv_show_passes_year_param(monkeypatch):
     assert captured["first_air_date_year"] == 2008
 
 
+def test_search_tv_show_uses_bearer_auth_for_v4_read_access_token(monkeypatch):
+    v4_token = "eyJhbGciOiJIUzI1NiJ9.payload.signature"
+    monkeypatch.setenv("TMDB_API_KEY", v4_token)
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert url == f"{tmdb.TMDB_BASE_URL}/search/tv"
+        assert "api_key" not in params
+        assert headers == {"Authorization": f"Bearer {v4_token}"}
+        return _FakeResponse({"results": [{"id": 1396, "name": "Breaking Bad"}]})
+
+    monkeypatch.setattr(tmdb.requests, "get", fake_get)
+    result = tmdb.search_tv_show("Breaking Bad")
+    assert result == {"id": 1396, "name": "Breaking Bad"}
+
+
 def test_search_tv_show_no_results_returns_none(monkeypatch):
     monkeypatch.setenv("TMDB_API_KEY", "test-key")
     monkeypatch.setattr(tmdb.requests, "get", lambda *a, **k: _FakeResponse({"results": []}))

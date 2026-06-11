@@ -18,11 +18,18 @@ const assistantMessage: TextMessage = {
 };
 
 describe("MessageBubble", () => {
-  it("renders a user message right-aligned with rtl direction for Hebrew", () => {
+  it("renders a user message left-aligned with rtl text direction for Hebrew", () => {
     render(<MessageBubble message={userMessage} lang="he" />);
 
     const bubble = screen.getByText("תמליץ לי על קומדיה");
     expect(bubble).toHaveAttribute("dir", "rtl");
+    expect(bubble.parentElement).toHaveClass("justify-start");
+  });
+
+  it("renders an assistant message right-aligned for Hebrew", () => {
+    render(<MessageBubble message={assistantMessage} lang="he" />);
+
+    const bubble = screen.getByText("Here are some comedies you might like.");
     expect(bubble.parentElement).toHaveClass("justify-end");
   });
 

@@ -11,7 +11,7 @@ interface OnboardingQuestionProps {
 
 export function OnboardingQuestion({ message, lang, onSelect }: OnboardingQuestionProps) {
   return (
-    <div className="flex w-full justify-start">
+    <div dir="ltr" className={`flex w-full ${lang === "he" ? "justify-end" : "justify-start"}`}>
       <div
         dir={lang === "he" ? "rtl" : "ltr"}
         className="max-w-[80%] rounded-lg border border-border bg-card px-3 py-2 text-sm text-card-foreground"
