@@ -1,5 +1,7 @@
 """POST /api/recommend - onboarding answers -> cluster + 3 picks + explanations."""
 
+from typing import Literal
+
 import pandas as pd
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
@@ -13,16 +15,19 @@ router = APIRouter()
 
 
 class OnboardingAnswers(BaseModel):
-    genre: str = "any"
-    length: str = "any"
-    era: str = "any"
-    tone: str = "any"
-    popularity: str = "any"
+    genre: Literal[
+        "drama", "comedy", "action_adventure", "scifi_fantasy",
+        "crime", "animation", "romance", "any",
+    ] = "any"
+    length: Literal["short", "medium", "long", "any"] = "any"
+    era: Literal["recent", "classic", "any"] = "any"
+    tone: Literal["light_fun", "serious_drama", "thriller_action", "any"] = "any"
+    popularity: Literal["well_known", "hidden_gem", "any"] = "any"
 
 
 class RecommendRequest(BaseModel):
     answers: OnboardingAnswers
-    lang: str = "he"
+    lang: Literal["he", "en"] = "he"
 
 
 class ShowSummary(BaseModel):
@@ -79,7 +84,7 @@ def recommend(payload: RecommendRequest, request: Request) -> RecommendResponse:
         ShowSummary(
             title=pick["title"],
             genres=pick["genres"],
-            rating=float(pick["rating"]),
+            rating=0.0 if pd.isna(pick["rating"]) else float(pick["rating"]),
             overview=pick["overview"],
             poster_path=_nan_to_none(pick.get("poster_path")),
             decade_str=pick["decade_str"],

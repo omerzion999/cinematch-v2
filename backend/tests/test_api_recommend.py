@@ -43,6 +43,13 @@ def test_recommend_hebrew_uses_hebrew_strings(client):
     assert "אהבת" in body["outro"]
 
 
+def test_recommend_invalid_answer_value_returns_422(client):
+    response = client.post(
+        "/api/recommend", json={"answers": {"genre": "not_a_real_genre"}, "lang": "en"}
+    )
+    assert response.status_code == 422
+
+
 def test_recommend_no_picks_in_a_cluster_returns_no_recommendations_message(client, monkeypatch):
     import app.routers.recommend as recommend_module
 
