@@ -63,7 +63,11 @@ function ShowDetailsContent({ show, lang, onClose }: ShowDetailsContentProps) {
   }, [show, lang]);
 
   return (
-    <DialogContent dir={lang === "he" ? "rtl" : "ltr"} className="max-h-[85vh] overflow-y-auto">
+    <DialogContent
+      dir={lang === "he" ? "rtl" : "ltr"}
+      className="max-h-[85vh] overflow-y-auto"
+      closeLabel={strings.closeDialog}
+    >
       <DialogHeader>
         <DialogTitle>{show.title}</DialogTitle>
         <DialogDescription>
