@@ -56,6 +56,15 @@ export interface ChatResponse {
   explanation: string | null;
 }
 
+export interface TranslateRequest {
+  texts: string[];
+  target_lang: Lang;
+}
+
+export interface TranslateResponse {
+  translations: string[];
+}
+
 export interface ShowDetails {
   title: string;
   genres: string;

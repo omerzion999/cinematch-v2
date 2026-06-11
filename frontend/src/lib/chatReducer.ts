@@ -1,4 +1,4 @@
-import { UI_STRINGS } from "./i18n";
+import { BACKEND_STRINGS, UI_STRINGS } from "./i18n";
 import { ONBOARDING_QUESTIONS, type OnboardingQuestion } from "./onboarding";
 import type { Lang, OnboardingAnswers, RecCard } from "./types";
 
@@ -59,6 +59,7 @@ export type ChatAction =
     }
   | { type: "CHAT_ERROR"; message: string }
   | { type: "TOGGLE_LANG" }
+  | { type: "APPLY_TRANSLATIONS"; translations: { id: string; content: string }[] }
   | { type: "RESTORE"; state: ChatState }
   | { type: "RESET_CONVERSATION" };
 
@@ -104,6 +105,66 @@ function buildQuestionMessage(
     prompt: question.prompt[lang],
     options: question.options.map((o) => ({ value: o.value, label: o.label[lang] })),
   };
+}
+
+/**
+ * Looks up `content` in known static string tables (UI_STRINGS / BACKEND_STRINGS)
+ * and returns its `toLang` equivalent, or null if `content` isn't a known
+ * static string (e.g. LLM-generated free text).
+ */
+export function findStaticTranslation(content: string, fromLang: Lang, toLang: Lang): string | null {
+  const uiFrom = UI_STRINGS[fromLang];
+  const uiTo = UI_STRINGS[toLang];
+  for (const key of ["skipGreeting", "genericError"] as const) {
+    if (uiFrom[key] === content) return uiTo[key];
+  }
+
+  const backendFrom = BACKEND_STRINGS[fromLang];
+  const backendTo = BACKEND_STRINGS[toLang];
+  for (const key of Object.keys(backendFrom)) {
+    if (backendFrom[key] === content) return backendTo[key];
+  }
+
+  return null;
+}
+
+/**
+ * Rebuilds a ChoiceMessage's prompt/options/selectedLabel in `toLang`, using
+ * the same static tables the message was originally built from
+ * (createInitialState's intro choice or an ONBOARDING_QUESTIONS entry).
+ * Returns the message unchanged if it doesn't match either table.
+ */
+export function translateChoiceMessage(message: ChoiceMessage, fromLang: Lang, toLang: Lang): ChoiceMessage {
+  const fromStrings = UI_STRINGS[fromLang];
+  const toStrings = UI_STRINGS[toLang];
+
+  const isIntro =
+    message.prompt === fromStrings.openingMessage &&
+    message.options.some((o) => o.value === "start") &&
+    message.options.some((o) => o.value === "skip");
+
+  if (isIntro) {
+    const options = message.options.map((o) => ({
+      value: o.value,
+      label: o.value === "start" ? toStrings.startOnboarding : toStrings.skipToChat,
+    }));
+    let selectedLabel = message.selectedLabel;
+    if (message.selectedValue === "start") selectedLabel = toStrings.startOnboarding;
+    else if (message.selectedValue === "skip") selectedLabel = toStrings.skipToChat;
+    return { ...message, prompt: toStrings.openingMessage, options, selectedLabel };
+  }
+
+  const question = ONBOARDING_QUESTIONS.find((q) => q.prompt[fromLang] === message.prompt);
+  if (!question) return message;
+
+  const options = message.options.map((o) => {
+    const match = question.options.find((qo) => qo.value === o.value);
+    return { value: o.value, label: match ? match.label[toLang] : o.label };
+  });
+  const selectedOption = question.options.find((qo) => qo.value === message.selectedValue);
+  const selectedLabel = selectedOption ? selectedOption.label[toLang] : message.selectedLabel;
+
+  return { ...message, prompt: question.prompt[toLang], options, selectedLabel };
 }
 
 // Assumes the last message is the open ChoiceMessage being answered; if not
@@ -245,10 +306,34 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         messages: [...state.messages, textMessage("assistant", action.message)],
       };
 
-    case "TOGGLE_LANG":
-      // Only flips the UI language (labels, placeholders, direction).
-      // The conversation itself is preserved as-is.
-      return { ...state, lang: state.lang === "he" ? "en" : "he" };
+    case "TOGGLE_LANG": {
+      const fromLang = state.lang;
+      const toLang = fromLang === "he" ? "en" : "he";
+      const messages = state.messages.map((message) => {
+        if (message.type === "choice") {
+          return translateChoiceMessage(message, fromLang, toLang);
+        }
+        if (message.type === "text" && message.role === "assistant") {
+          const translated = findStaticTranslation(message.content, fromLang, toLang);
+          if (translated !== null) {
+            return { ...message, content: translated };
+          }
+        }
+        return message;
+      });
+      return { ...state, lang: toLang, messages };
+    }
+
+    case "APPLY_TRANSLATIONS": {
+      const translationById = new Map(action.translations.map((t) => [t.id, t.content]));
+      const messages = state.messages.map((message) => {
+        if (message.type === "text" && translationById.has(message.id)) {
+          return { ...message, content: translationById.get(message.id)! };
+        }
+        return message;
+      });
+      return { ...state, messages };
+    }
 
     case "RESTORE":
       return action.state;

@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useChatState } from "@/hooks/useChatState";
+import { postTranslate } from "@/lib/api";
+import { findStaticTranslation, type TextMessage } from "@/lib/chatReducer";
 import { UI_STRINGS } from "@/lib/i18n";
 import { ONBOARDING_QUESTIONS } from "@/lib/onboarding";
 import type { RecCard as RecCardData } from "@/lib/types";
@@ -61,6 +63,40 @@ export function ChatWindow() {
     setInputValue("");
   }
 
+  async function handleToggleLang() {
+    const fromLang = state.lang;
+    const toLang = fromLang === "he" ? "en" : "he";
+
+    // Free-form assistant text that has no static translation needs an LLM
+    // round-trip; collect it before TOGGLE_LANG flips state.lang.
+    const dynamicMessages = state.messages.filter(
+      (message): message is TextMessage =>
+        message.type === "text" &&
+        message.role === "assistant" &&
+        findStaticTranslation(message.content, fromLang, toLang) === null
+    );
+
+    dispatch({ type: "TOGGLE_LANG" });
+
+    if (dynamicMessages.length === 0) return;
+
+    try {
+      const { translations } = await postTranslate({
+        texts: dynamicMessages.map((message) => message.content),
+        target_lang: toLang,
+      });
+      dispatch({
+        type: "APPLY_TRANSLATIONS",
+        translations: dynamicMessages.map((message, index) => ({
+          id: message.id,
+          content: translations[index],
+        })),
+      });
+    } catch {
+      // Keep the original-language text if translation fails.
+    }
+  }
+
   const SendIcon = dir === "rtl" ? ArrowLeft : ArrowRight;
 
   return (
@@ -91,7 +127,7 @@ export function ChatWindow() {
               variant="outline"
               size="sm"
               className="rounded-full border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
-              onClick={() => dispatch({ type: "TOGGLE_LANG" })}
+              onClick={() => void handleToggleLang()}
             >
               {strings.languageToggleLabel}
             </Button>

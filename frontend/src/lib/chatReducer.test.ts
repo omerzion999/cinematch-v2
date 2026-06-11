@@ -7,6 +7,7 @@ import {
   type RecommendationsMessage,
   type TextMessage,
 } from "./chatReducer";
+import { BACKEND_STRINGS, UI_STRINGS } from "./i18n";
 import { ONBOARDING_QUESTIONS } from "./onboarding";
 import type { RecCard } from "./types";
 
@@ -206,26 +207,128 @@ describe("chatReducer", () => {
     expect(last.content).toBe("שגיאה זמנית");
   });
 
-  it("TOGGLE_LANG only flips the UI language and preserves the conversation as-is", () => {
-    const userMessage: TextMessage = { id: "u1", type: "text", role: "user", content: "hi" };
+  it("TOGGLE_LANG retranslates the intro choice message and preserves phase/prevRecs/answers", () => {
     const state: ChatState = {
       ...createInitialState("he"),
       phase: "chat",
-      messages: [...createInitialState("he").messages, userMessage],
       prevRecs: [SAMPLE_CARD],
     };
 
     const next = chatReducer(state, { type: "TOGGLE_LANG" });
     expect(next.lang).toBe("en");
     expect(next.phase).toBe(state.phase);
-    expect(next.messages).toEqual(state.messages);
     expect(next.prevRecs).toEqual(state.prevRecs);
     expect(next.onboardingStepIndex).toBe(state.onboardingStepIndex);
     expect(next.onboardingAnswers).toEqual(state.onboardingAnswers);
 
+    const opening = next.messages[0] as ChoiceMessage;
+    expect(opening.prompt).toBe(UI_STRINGS.en.openingMessage);
+    expect(opening.options.map((o) => o.label)).toEqual([
+      UI_STRINGS.en.startOnboarding,
+      UI_STRINGS.en.skipToChat,
+    ]);
+
     const back = chatReducer(next, { type: "TOGGLE_LANG" });
     expect(back.lang).toBe("he");
-    expect(back.messages).toEqual(state.messages);
+    expect((back.messages[0] as ChoiceMessage).prompt).toBe(UI_STRINGS.he.openingMessage);
+  });
+
+  it("TOGGLE_LANG retranslates onboarding question prompts, options, and selectedLabel", () => {
+    let state = chatReducer(createInitialState("he"), { type: "START_ONBOARDING" });
+    state = chatReducer(state, {
+      type: "ANSWER_ONBOARDING_QUESTION",
+      questionId: "genre",
+      value: "drama",
+    });
+
+    const next = chatReducer(state, { type: "TOGGLE_LANG" });
+    expect(next.lang).toBe("en");
+
+    const answeredGenre = next.messages[1] as ChoiceMessage;
+    expect(answeredGenre.prompt).toBe(ONBOARDING_QUESTIONS[0].prompt.en);
+    expect(answeredGenre.selectedValue).toBe("drama");
+    expect(answeredGenre.selectedLabel).toBe(
+      ONBOARDING_QUESTIONS[0].options.find((o) => o.value === "drama")!.label.en
+    );
+
+    const lengthQuestion = next.messages[2] as ChoiceMessage;
+    expect(lengthQuestion.prompt).toBe(ONBOARDING_QUESTIONS[1].prompt.en);
+    expect(lengthQuestion.options.map((o) => o.label)).toEqual(
+      ONBOARDING_QUESTIONS[1].options.map((o) => o.label.en)
+    );
+
+    const back = chatReducer(next, { type: "TOGGLE_LANG" });
+    expect((back.messages[1] as ChoiceMessage).prompt).toBe(ONBOARDING_QUESTIONS[0].prompt.he);
+    expect((back.messages[1] as ChoiceMessage).selectedLabel).toBe(
+      ONBOARDING_QUESTIONS[0].options.find((o) => o.value === "drama")!.label.he
+    );
+  });
+
+  it("TOGGLE_LANG retranslates known static assistant messages but leaves user/free-form text untouched", () => {
+    const userMessage: TextMessage = { id: "u1", type: "text", role: "user", content: "hi" };
+    const skipGreeting: TextMessage = {
+      id: "g1",
+      type: "text",
+      role: "assistant",
+      content: UI_STRINGS.he.skipGreeting,
+    };
+    const genericError: TextMessage = {
+      id: "e1",
+      type: "text",
+      role: "assistant",
+      content: UI_STRINGS.he.genericError,
+    };
+    const outro: TextMessage = {
+      id: "o1",
+      type: "text",
+      role: "assistant",
+      content: BACKEND_STRINGS.he.recommend_outro,
+    };
+    const freeform: TextMessage = {
+      id: "f1",
+      type: "text",
+      role: "assistant",
+      content: "אתה בטעם של: דרמות מתח",
+    };
+
+    const state: ChatState = {
+      ...createInitialState("he"),
+      phase: "chat",
+      messages: [...createInitialState("he").messages, userMessage, skipGreeting, genericError, outro, freeform],
+    };
+
+    const next = chatReducer(state, { type: "TOGGLE_LANG" });
+
+    const byId = (id: string) => next.messages.find((m) => m.id === id) as TextMessage;
+    expect(byId("u1").content).toBe("hi");
+    expect(byId("g1").content).toBe(UI_STRINGS.en.skipGreeting);
+    expect(byId("e1").content).toBe(UI_STRINGS.en.genericError);
+    expect(byId("o1").content).toBe(BACKEND_STRINGS.en.recommend_outro);
+    expect(byId("f1").content).toBe("אתה בטעם של: דרמות מתח");
+  });
+
+  it("APPLY_TRANSLATIONS patches text message content by id and leaves other messages unchanged", () => {
+    const freeform: TextMessage = {
+      id: "f1",
+      type: "text",
+      role: "assistant",
+      content: "אתה בטעם של: דרמות מתח",
+    };
+    const state: ChatState = {
+      ...createInitialState("he"),
+      phase: "chat",
+      messages: [...createInitialState("he").messages, freeform],
+    };
+
+    const next = chatReducer(state, {
+      type: "APPLY_TRANSLATIONS",
+      translations: [{ id: "f1", content: "You're into: tense dramas" }],
+    });
+
+    expect((next.messages.find((m) => m.id === "f1") as TextMessage).content).toBe(
+      "You're into: tense dramas"
+    );
+    expect(next.messages[0]).toEqual(state.messages[0]);
   });
 
   it("RESTORE replaces the entire state (used to load persisted state)", () => {

@@ -46,3 +46,27 @@ export const UI_STRINGS: Record<Lang, Record<string, string>> = {
     newConversation: "New conversation",
   },
 };
+
+/**
+ * Mirrors the non-templated entries of the backend's `app/i18n.py` STRINGS
+ * dict, so assistant messages built from those strings can be retranslated
+ * instantly via lookup instead of a round-trip to /api/translate.
+ */
+export const BACKEND_STRINGS: Record<Lang, Record<string, string>> = {
+  he: {
+    recommend_outro:
+      "מקווה שאהבת את ההמלצות! אפשר להמשיך לדבר איתי על סדרות, לבקש עוד המלצות, או לשאול אותי כל דבר.",
+    no_recommendations:
+      "לא הצלחתי למצוא המלצות מתאימות הפעם. אפשר לנסות עם תשובות אחרות?",
+    show_not_found: "לא מצאתי את הסדרה הזו במאגר שלנו.",
+    not_in_catalog: "זה לא מופיע במאגר הנתונים שלי, אולי תנסה לנסח את זה מחדש?",
+  },
+  en: {
+    recommend_outro:
+      "Hope you like these picks! Feel free to keep chatting, ask for more recommendations, or anything else.",
+    no_recommendations:
+      "I couldn't find matching recommendations this time. Want to try different answers?",
+    show_not_found: "I couldn't find that show in our catalog.",
+    not_in_catalog: "That doesn't seem to be in my catalog, maybe try rephrasing?",
+  },
+};

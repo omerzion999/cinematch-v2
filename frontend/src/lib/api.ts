@@ -5,6 +5,8 @@ import type {
   RecommendRequest,
   RecommendResponse,
   ShowDetails,
+  TranslateRequest,
+  TranslateResponse,
 } from "./types";
 
 const API_BASE = "/api";
@@ -37,6 +39,10 @@ export function postRecommend(request: RecommendRequest): Promise<RecommendRespo
 
 export function postChat(request: ChatRequest): Promise<ChatResponse> {
   return postJson<ChatResponse>("/chat", request);
+}
+
+export function postTranslate(request: TranslateRequest): Promise<TranslateResponse> {
+  return postJson<TranslateResponse>("/translate", request);
 }
 
 export async function getShow(title: string, lang: Lang): Promise<ShowDetails> {

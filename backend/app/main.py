@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import chat, recommend, show
+from app.routers import chat, recommend, show, translate
 from app.state import load_state
 
 load_dotenv()
@@ -23,6 +23,7 @@ app = FastAPI(title="CineMatch AI v2", lifespan=lifespan)
 app.include_router(recommend.router)
 app.include_router(chat.router)
 app.include_router(show.router)
+app.include_router(translate.router)
 
 
 @app.get("/api/health")
