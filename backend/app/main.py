@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.routers import chat, recommend
+from app.routers import chat, recommend, show
 from app.state import load_state
 
 
@@ -15,6 +15,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="CineMatch AI v2", lifespan=lifespan)
 app.include_router(recommend.router)
 app.include_router(chat.router)
+app.include_router(show.router)
 
 
 @app.get("/api/health")
