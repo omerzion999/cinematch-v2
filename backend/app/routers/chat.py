@@ -50,7 +50,7 @@ def _to_rec_cards(df: pd.DataFrame) -> list[RecCard]:
         RecCard(
             title=row["title"],
             genres=row["genres"],
-            rating=float(row["rating"]),
+            rating=0.0 if pd.isna(row["rating"]) else float(row["rating"]),
             overview=row["overview"],
             poster_path=_nan_to_none(row.get("poster_path")),
             decade_str=row["decade_str"],
