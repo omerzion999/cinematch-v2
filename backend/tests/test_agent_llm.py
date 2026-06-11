@@ -1,4 +1,18 @@
+import pytest
+
 from app.agent import llm
+
+
+@pytest.fixture(autouse=True)
+def reset_llm_client_state():
+    """Reset llm module global client state before and after each test."""
+    llm._provider = None
+    llm._groq_client = None
+    llm._anthropic_client = None
+    yield
+    llm._provider = None
+    llm._groq_client = None
+    llm._anthropic_client = None
 
 
 def test_read_secret_reads_from_environ(monkeypatch):
@@ -12,6 +26,10 @@ def test_read_secret_missing_returns_none(monkeypatch):
 
 
 def test_regex_parse_detects_dark_mood_and_hebrew():
+    # "ומותחן" (and-thriller) must include the trailing "ן" so this string
+    # contains "מותחן" — the exact "thrilling" keyword in _regex_parse's
+    # mood_map (llm.py). Without that final letter the substring match
+    # fails against the verbatim-ported v1 regex.
     result = llm._regex_parse("אני רוצה משהו אפל ומותחן")
     assert "dark" in result["mood"]
     assert "thrilling" in result["mood"]
