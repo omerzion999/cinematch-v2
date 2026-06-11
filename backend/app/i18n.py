@@ -30,5 +30,8 @@ def t(key: str, lang: str = "en", **kwargs) -> str:
     entry = STRINGS.get(key, {})
     template = entry.get(lang, entry.get("en", ""))
     if kwargs:
-        return template.format(**kwargs)
+        try:
+            return template.format(**kwargs)
+        except (KeyError, IndexError):
+            return template
     return template
