@@ -10,7 +10,9 @@ function isChatState(value: unknown): value is ChatState {
     typeof candidate.lang === "string" &&
     typeof candidate.onboardingStepIndex === "number" &&
     typeof candidate.onboardingAnswers === "object" &&
-    Array.isArray(candidate.messages)
+    candidate.onboardingAnswers !== null &&
+    Array.isArray(candidate.messages) &&
+    (candidate.prevRecs === null || Array.isArray(candidate.prevRecs))
   );
 }
 
