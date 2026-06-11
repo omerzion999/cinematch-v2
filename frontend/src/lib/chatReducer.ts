@@ -105,6 +105,8 @@ function buildQuestionMessage(
   };
 }
 
+// Assumes the last message is the open ChoiceMessage being answered; if not
+// (e.g. a malformed RESTORE), this is a silent no-op rather than a crash.
 function closeLastChoice(
   messages: ChatMessage[],
   selectedValue: string,
@@ -150,6 +152,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     case "ANSWER_ONBOARDING_QUESTION": {
       const question = ONBOARDING_QUESTIONS[state.onboardingStepIndex];
+      if (!question) return state;
       const option = question.options.find((o) => o.value === action.value);
       const label = option ? option.label[state.lang] : action.value;
 
@@ -244,7 +247,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "RESTORE":
       return action.state;
 
-    default:
-      return state;
+    default: {
+      const _exhaustive: never = action;
+      return _exhaustive;
+    }
   }
 }

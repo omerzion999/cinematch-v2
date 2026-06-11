@@ -167,6 +167,24 @@ describe("chatReducer", () => {
     expect((last3[2] as TextMessage).content).toBe("שתיהן דרמות מתח עכשוויות.");
   });
 
+  it("CHAT_SUCCESS with recommendations but no explanation appends reply and cards only", () => {
+    const state: ChatState = { ...createInitialState("he"), phase: "loading_chat" };
+
+    const next = chatReducer(state, {
+      type: "CHAT_SUCCESS",
+      reply: "הנה כמה הצעות:",
+      cards: [SAMPLE_CARD],
+    });
+
+    expect(next.phase).toBe("chat");
+    expect(next.prevRecs).toEqual([SAMPLE_CARD]);
+
+    const last2 = next.messages.slice(-2);
+    expect((last2[0] as TextMessage).content).toBe("הנה כמה הצעות:");
+    expect((last2[1] as RecommendationsMessage).cards).toEqual([SAMPLE_CARD]);
+    expect(next.messages).toHaveLength(state.messages.length + 2);
+  });
+
   it("CHAT_SUCCESS without recommendations only appends the reply", () => {
     const state: ChatState = { ...createInitialState("he"), phase: "loading_chat" };
 
