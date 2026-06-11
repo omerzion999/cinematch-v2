@@ -111,3 +111,23 @@ def test_chat_turn_fast_followup_shorter(monkeypatch):
     result = llm.chat_turn(conversation, prev_recs=prev_recs, lang="en")
     assert result["action"] == "refine"
     assert result["intent"]["length_pref"] == "short"
+
+
+def test_is_gibberish_flags_only_obvious_keyboard_mashing():
+    assert llm._is_gibberish("sjfnkfdsngkjdhf") is True
+    assert llm._is_gibberish("hello") is False
+    assert llm._is_gibberish("hi") is False
+    assert llm._is_gibberish("israeli series") is False
+    assert llm._is_gibberish("NASA") is False
+    assert llm._is_gibberish("שלום") is False
+    assert llm._is_gibberish("abc123") is False
+
+
+def test_chat_turn_gibberish_fast_path_returns_not_in_catalog_message(monkeypatch):
+    monkeypatch.setattr(llm, "_get_client", lambda: None)
+    monkeypatch.setattr(llm, "_provider", None)
+    conversation = [{"role": "user", "content": "sjfnkfdsngkjdhf"}]
+    result = llm.chat_turn(conversation, prev_recs=None, lang="en")
+    assert result["action"] == "chat"
+    assert result["reply"] == "That doesn't seem to be in my catalog, maybe try rephrasing?"
+    assert result["intent"]["language_pref"] == "any"

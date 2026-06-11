@@ -23,6 +23,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "he": "לא מצאתי את הסדרה הזו במאגר שלנו.",
         "en": "I couldn't find that show in our catalog.",
     },
+    "not_in_catalog": {
+        "he": "זה לא מופיע במאגר הנתונים שלי, אולי תנסה לנסח את זה מחדש?",
+        "en": "That doesn't seem to be in my catalog, maybe try rephrasing?",
+    },
 }
 
 

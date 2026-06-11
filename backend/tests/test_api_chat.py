@@ -1,10 +1,11 @@
 import app.routers.chat as chat_module
 
 
-def _search_intent(free_text="anything", mood=None):
+def _search_intent(free_text="anything", mood=None, language_pref="any"):
     return {
         "seeds": [], "mood": mood or [], "length_pref": "any",
-        "exclude_genres": [], "lang": "en", "free_text": free_text,
+        "exclude_genres": [], "lang": "en", "language_pref": language_pref,
+        "free_text": free_text,
     }
 
 
@@ -97,6 +98,113 @@ def test_chat_refine_excludes_previously_shown_titles(client, monkeypatch):
     second_titles = {r["title"] for r in second_recs}
     assert second_titles
     assert first_titles.isdisjoint(second_titles)
+
+
+def test_chat_search_with_israeli_language_pref_returns_hebrew_titles(client, monkeypatch):
+    monkeypatch.setattr(
+        chat_module,
+        "chat_turn",
+        lambda conversation, prev_recs=None, lang="he": {
+            "action": "search",
+            "intent": _search_intent("israeli series", language_pref="he"),
+            "reply": "Sure, here are some Israeli shows:",
+            "follow_up": "",
+        },
+    )
+
+    response = client.post(
+        "/api/chat",
+        json={"conversation": [{"role": "user", "content": "israeli series"}], "lang": "en"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    recs = body["recommendations"]
+    assert recs
+    he_titles = {
+        "Shtisel", "Prisoners of War", "Valley of Tears", "Shadow of Truth",
+        "False Flag", "When Heroes Fly", "The Attach�", "Black Space",
+        "Losing Alice", "The Motive",
+    }
+    assert all(r["title"] in he_titles for r in recs)
+
+
+def test_chat_search_with_israeli_language_pref_exhausted_returns_not_in_catalog(client, monkeypatch):
+    catalog = client.app.state.cinematch["catalog"]
+    all_he_titles = catalog[catalog["language"] == "he"]["title"].tolist()
+    prev_recs = [
+        {
+            "title": title, "genres": "Drama", "rating": 7.0, "overview": "",
+            "decade_str": "2010s",
+        }
+        for title in all_he_titles
+    ]
+
+    monkeypatch.setattr(
+        chat_module,
+        "chat_turn",
+        lambda conversation, prev_recs=None, lang="he": {
+            "action": "search",
+            "intent": _search_intent("israeli series", language_pref="he"),
+            "reply": "Sure, here are some Israeli shows:",
+            "follow_up": "",
+        },
+    )
+
+    response = client.post(
+        "/api/chat",
+        json={
+            "conversation": [{"role": "user", "content": "more israeli series"}],
+            "prev_recs": prev_recs,
+            "lang": "en",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["recommendations"] is None
+    assert body["reply"] == "That doesn't seem to be in my catalog, maybe try rephrasing?"
+
+
+def test_chat_swap_slot_with_exhausted_language_pref_returns_not_in_catalog(client, monkeypatch):
+    catalog = client.app.state.cinematch["catalog"]
+    all_he_titles = catalog[catalog["language"] == "he"]["title"].tolist()
+    prev_recs = [
+        {
+            "title": title, "genres": "Drama", "rating": 7.0, "overview": "",
+            "decade_str": "2010s",
+        }
+        for title in all_he_titles[:3]
+    ] + [
+        {
+            "title": title, "genres": "Drama", "rating": 7.0, "overview": "",
+            "decade_str": "2010s",
+        }
+        for title in all_he_titles[3:]
+    ]
+
+    monkeypatch.setattr(
+        chat_module,
+        "chat_turn",
+        lambda conversation, prev_recs=None, lang="he": {
+            "action": "swap_slot",
+            "intent": _search_intent("already watched the first israeli one", language_pref="he"),
+            "reply": "Swapping the first.",
+            "swap_slot_index": 0,
+            "follow_up": "",
+        },
+    )
+
+    response = client.post(
+        "/api/chat",
+        json={
+            "conversation": [{"role": "user", "content": "swap the first one"}],
+            "prev_recs": prev_recs,
+            "lang": "en",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reply"] == "That doesn't seem to be in my catalog, maybe try rephrasing?"
+    assert [r["title"] for r in body["recommendations"]] == [r["title"] for r in prev_recs]
 
 
 def test_chat_swap_slot_replaces_only_target_slot(client, monkeypatch):

@@ -102,7 +102,17 @@ def _cluster_based_picks(state, intent, exclude_titles, top_n=3):
     )
 
 
+def _language_filtered_picks(state, language: str, exclude_titles, top_n=3) -> pd.DataFrame:
+    catalog = state["catalog"]
+    df = catalog[catalog["language"] == language]
+    if exclude_titles:
+        df = df[~df["title"].isin(exclude_titles)]
+    return df.sort_values("rating", ascending=False, na_position="last").head(top_n)
+
+
 def _picks_for_intent(state, intent, lang, exclude_titles, top_n=3):
+    if intent.get("language_pref") == "he":
+        return _language_filtered_picks(state, "he", exclude_titles, top_n)
     seeds = intent.get("seeds") or []
     if seeds:
         picks = _seed_based_picks(state, seeds[0], lang, exclude_titles, top_n)
@@ -130,14 +140,15 @@ def chat(payload: ChatRequest, request: Request) -> ChatResponse:
         slot_index = result["swap_slot_index"]
         new_picks = _picks_for_intent(state, intent, payload.lang, exclude_titles, top_n=1)
         cards = list(payload.prev_recs or [])
-        if not new_picks.empty:
-            cards[slot_index] = _to_rec_cards(new_picks)[0]
+        if new_picks.empty:
+            return ChatResponse(reply=t("not_in_catalog", payload.lang), recommendations=cards)
+        cards[slot_index] = _to_rec_cards(new_picks)[0]
         return ChatResponse(reply=result["reply"], recommendations=cards)
 
     # action in ("search", "refine")
     picks = _picks_for_intent(state, intent, payload.lang, exclude_titles, top_n=3)
     if picks.empty:
-        return ChatResponse(reply=result["reply"] or t("no_recommendations", payload.lang))
+        return ChatResponse(reply=t("not_in_catalog", payload.lang))
 
     cards = _to_rec_cards(picks)
     explanation = explain_recommendations(intent, picks.to_dict(orient="records"), payload.lang)

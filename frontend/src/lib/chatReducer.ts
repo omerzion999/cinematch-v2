@@ -215,7 +215,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
 
     case "CHAT_SUCCESS": {
-      const messages: ChatMessage[] = [...state.messages, textMessage("assistant", action.reply)];
+      const messages: ChatMessage[] = [...state.messages];
+      if (action.reply && action.reply.trim()) {
+        messages.push(textMessage("assistant", action.reply));
+      }
       let prevRecs = state.prevRecs;
 
       if (action.cards && action.cards.length > 0) {

@@ -7,6 +7,8 @@ from __future__ import annotations
 import json, math, os, re
 from typing import Optional
 
+from app.i18n import t
+
 # ── Client state ───────────────────────────────────────────────────────────────
 
 _groq_client = None
@@ -123,7 +125,10 @@ _GROQ_MODEL_FAST = "llama-3.1-8b-instant"      # parser, classifier, explainer (
 # Persona is flatter but the agent actually replies.
 
 
-def _call_llm(system: str, user: str, max_tokens: int = 600, *, model: Optional[str] = None) -> Optional[str]:
+def _call_llm(
+    system: str, user: str, max_tokens: int = 600, *,
+    model: Optional[str] = None, temperature: Optional[float] = None,
+) -> Optional[str]:
     # Groq path: retry up to 3 times with a 5-second per-attempt timeout.
     # Total worst-case still ~15 seconds, but transient slowness on the first
     # attempt now gets two more chances instead of immediately falling back.
@@ -132,7 +137,7 @@ def _call_llm(system: str, user: str, max_tokens: int = 600, *, model: Optional[
     if _provider == "groq":
         for _attempt in range(3):
             try:
-                response = _groq_client.chat.completions.create(
+                kwargs = dict(
                     model=model or _GROQ_MODEL_FAST,
                     max_tokens=max_tokens,
                     messages=[
@@ -141,6 +146,9 @@ def _call_llm(system: str, user: str, max_tokens: int = 600, *, model: Optional[
                     ],
                     timeout=5,
                 )
+                if temperature is not None:
+                    kwargs["temperature"] = temperature
+                response = _groq_client.chat.completions.create(**kwargs)
                 return response.choices[0].message.content.strip()
             except Exception as _e:
                 # Heuristic: retry on timeout-shaped errors, break on others.
@@ -152,13 +160,16 @@ def _call_llm(system: str, user: str, max_tokens: int = 600, *, model: Optional[
 
     if _provider == "anthropic":
         try:
-            response = _anthropic_client.messages.create(
+            kwargs = dict(
                 model="claude-sonnet-4-6",
                 max_tokens=max_tokens,
                 system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": user}],
                 timeout=15,
             )
+            if temperature is not None:
+                kwargs["temperature"] = temperature
+            response = _anthropic_client.messages.create(**kwargs)
             return response.content[0].text.strip()
         except Exception:
             return None
@@ -390,6 +401,25 @@ def _detect_followup_type(msg: str) -> Optional[str]:
     return None
 
 
+_VOWELS = set("aeiouAEIOU")
+
+
+def _is_gibberish(msg: str) -> bool:
+    """Very conservative, low-threshold detector for keyboard-mashing input.
+
+    Only flags a single Latin-alphabet "word" (no spaces) of 6+ letters that
+    contains no vowels at all, e.g. "sjfnkfdsngkjdhf". Real words, acronyms,
+    short input, numbers, punctuation, and Hebrew text are never flagged, so
+    this never blocks a genuine (if terse) request.
+    """
+    text = msg.strip()
+    if len(text) < 6 or " " in text or "\n" in text:
+        return False
+    if not re.fullmatch(r"[A-Za-z]+", text):
+        return False
+    return not any(c in _VOWELS for c in text)
+
+
 # ── Additional keyword patterns ───────────────────────────────────────────────
 
 _QUESTION_TOKENS = [
@@ -482,12 +512,13 @@ PERSONALITY
 - One light scope-mention per off-topic redirect is plenty. Do not be preachy or repeat the disclaimer.
 - Keep replies short and conversational, 1 to 3 sentences usually.
 - Have opinions, show personality.
-- Handle gibberish (random letters, unclear input) by asking a friendly clarifying question about what they want to watch.
+- Handle gibberish or unclear input (random letters, a request for something that clearly is not a TV/movie ask) with ONE short, plain sentence asking them to rephrase. Do NOT speculate about what they might have meant, do NOT invent theories or philosophical asides, and do NOT reference earlier parts of the conversation in your guess. Keep it simple: "I didn't quite catch that, what are you in the mood to watch?" / "זה לא ממש ברור לי, אפשר לנסח מחדש?"
 
 CONTINUITY (THIS IS WHAT MAKES YOU FEEL REAL)
 - Always reference what the user said EARLIER in this conversation when relevant. If they mentioned a show 3 turns ago, bring it up by name. If they hinted at a mood, remember it. If they said they already watched something, do not recommend it again.
 - If the user shifts topics, follow them. If they come back to TV later, recall what they liked before.
 - Never make the user repeat themselves. Treat the whole conversation as one ongoing dialogue, not a series of isolated questions.
+- ONLY reference earlier context when it is clear and directly relevant. Never speculate, guess at hidden meaning, or invent commentary about what the user "might be thinking". If you are not sure what they mean, just ask, do not guess out loud.
 
 TASK
 Read the full conversation and the on-screen recommendations. Decide what to do next, and craft your reply.
@@ -503,10 +534,17 @@ Reply with valid JSON only. No markdown fences, no prose around it.
     "length_pref": "short" | "long" | "any",
     "exclude_genres": [],
     "lang": "he" | "en",
+    "language_pref": "he" | "any",
     "free_text": "<plain-text version of the user's underlying request>"
   },
   "swap_slot_index": <0-based integer 0..4, only when action is swap_slot>
 }
+
+language_pref: set to "he" ONLY when the user explicitly asks for Israeli or
+Hebrew-language shows/movies (e.g. "israeli series", "סדרות ישראליות",
+"תוכן בעברית", "Hebrew shows"). Otherwise leave as "any". This describes the
+ORIGIN of the content, not the language of the conversation, do not set "he"
+just because the chat itself is in Hebrew.
 
 BIAS TOWARD ACTION (STRICT)
 - If the user expresses ANY interest in watching something (names a genre, mood, vibe, format, or says things like "recommend me something funny" / "אשמח להמלצות על סדרות מצחיקות"), use action "search" (or "refine"/"swap_slot" when appropriate) RIGHT AWAY. Do NOT respond with a clarifying question first.
@@ -618,7 +656,19 @@ User: "sitcom"  (LANGUAGE: he, replying to a previous question about what kind o
 {"action":"search","reply":"מעולה, הנה כמה סיטקומים:","intent":{"seeds":[],"mood":["funny","sitcom"],"length_pref":"any","exclude_genres":[],"lang":"he","free_text":"sitcom recommendations"}}
 
 User: "קצרות יותר"  (with prev_recs present, LANGUAGE: he)
-{"action":"refine","reply":"סבבה, הנה משהו קצר יותר:","intent":{"seeds":[],"mood":[],"length_pref":"short","exclude_genres":[],"lang":"he","free_text":"shorter shows"}}
+{"action":"refine","reply":"סבבה, הנה משהו קצר יותר:","intent":{"seeds":[],"mood":[],"length_pref":"short","exclude_genres":[],"lang":"he","language_pref":"any","free_text":"shorter shows"}}
+
+User: "israeli series"
+{"action":"search","reply":"Sure, here are some Israeli shows:","intent":{"seeds":[],"mood":[],"length_pref":"any","exclude_genres":[],"lang":"en","language_pref":"he","free_text":"Israeli series recommendations"}}
+
+User: "יש לכם סדרות ישראליות?"
+{"action":"search","reply":"בטח, הנה כמה סדרות ישראליות:","intent":{"seeds":[],"mood":[],"length_pref":"any","exclude_genres":[],"lang":"he","language_pref":"he","free_text":"Israeli series recommendations"}}
+
+User: "fkjghslkdfjh"  (LANGUAGE: en)
+{"action":"chat","reply":"I didn't quite catch that, what are you in the mood to watch?","intent":{"seeds":[],"mood":[],"length_pref":"any","exclude_genres":[],"lang":"en","language_pref":"any","free_text":"unclear input"}}
+
+User: "סדגכח כגדשח"  (LANGUAGE: he)
+{"action":"chat","reply":"זה לא ממש ברור לי, מה בא לך לראות?","intent":{"seeds":[],"mood":[],"length_pref":"any","exclude_genres":[],"lang":"he","language_pref":"any","free_text":"unclear input"}}
 """
 
 
@@ -691,6 +741,21 @@ def chat_turn(
                 base_intent["foreign_only"] = True
                 return {"action": "refine", "intent": base_intent, "reply": "", "follow_up": ""}
 
+    # ── Gibberish fast-path (no LLM) ──────────────────────────────────────────
+    # Low threshold: only fires for obvious keyboard-mashing (see _is_gibberish).
+    if _is_gibberish(last_user):
+        base_intent = {
+            "seeds": [], "mood": [], "length_pref": "any",
+            "exclude_genres": [], "lang": detected_lang,
+            "language_pref": "any", "free_text": last_user,
+        }
+        return {
+            "action": "chat",
+            "intent": base_intent,
+            "reply": t("not_in_catalog", detected_lang),
+            "follow_up": "",
+        }
+
     # ── No LLM available ──────────────────────────────────────────────────────
     if _provider is None:
         return {"action": "search", "intent": fallback, "reply": "", "follow_up": ""}
@@ -725,6 +790,7 @@ def chat_turn(
         f"Conversation transcript:\n{conv_text}{recs_ctx}\n\n{language_directive}\n\nDecide and respond in JSON only.",
         max_tokens=600,
         model=_GROQ_MODEL_CHAT,
+        temperature=0.4,
     )
 
     if raw:
@@ -754,7 +820,10 @@ def chat_turn(
             intent.setdefault("length_pref", "any")
             intent.setdefault("exclude_genres", [])
             intent.setdefault("lang", detected_lang)
+            intent.setdefault("language_pref", "any")
             intent.setdefault("free_text", last_user)
+            if intent.get("language_pref") not in ("he", "any"):
+                intent["language_pref"] = "any"
             result["intent"] = intent
 
             # Validate swap_slot_index when relevant
