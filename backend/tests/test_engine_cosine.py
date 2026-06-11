@@ -12,11 +12,11 @@ def test_numeric_cols_are_the_four_z_scores():
     assert NUMERIC_COLS == ["rating_z", "votes_z", "start_year_z", "popularity_z"]
 
 
-def test_build_numeric_matrix_is_symmetric_with_unit_diagonal(catalog):
+def test_build_numeric_matrix_returns_feature_matrix(catalog):
     matrix = build_numeric_matrix(catalog)
-    assert matrix.shape == (len(catalog), len(catalog))
-    assert np.allclose(np.diag(matrix), 1.0, atol=1e-4)
-    assert np.allclose(matrix, matrix.T, atol=1e-4)
+    assert matrix.shape == (len(catalog), len(NUMERIC_COLS))
+    expected = catalog[NUMERIC_COLS].fillna(0).values.astype(np.float32)
+    assert np.allclose(matrix, expected)
 
 
 def test_top_k_cosine_numeric_returns_k_rows(catalog, numeric_matrix):

@@ -4,7 +4,7 @@ Priority: GROQ_API_KEY → ANTHROPIC_API_KEY → offline regex fallback.
 """
 from __future__ import annotations
 
-import os, re, json
+import json, math, os, re
 from typing import Optional
 
 # ── Client state ───────────────────────────────────────────────────────────────
@@ -760,6 +760,8 @@ def _fallback_explanation(intent: dict, recommendations: list[dict], lang: str) 
         lines = [opener]
         for r in recommendations:
             rating = r.get("rating", "")
+            if isinstance(rating, float) and math.isnan(rating):
+                rating = 0.0
             rating_str = f"{rating:.1f}" if isinstance(rating, float) else str(rating)
             lines.append(f"• {r['title']} — {r.get('genres','')} | ⭐ {rating_str}")
     else:
@@ -773,6 +775,8 @@ def _fallback_explanation(intent: dict, recommendations: list[dict], lang: str) 
         lines = [opener]
         for r in recommendations:
             rating = r.get("rating", "")
+            if isinstance(rating, float) and math.isnan(rating):
+                rating = 0.0
             rating_str = f"{rating:.1f}" if isinstance(rating, float) else str(rating)
             lines.append(f"• {r['title']} — {r.get('genres','')} | ⭐ {rating_str}")
     return "\n".join(lines)

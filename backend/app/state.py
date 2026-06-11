@@ -10,6 +10,7 @@ import os
 
 import numpy as np
 import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity as sk_cosine
 
 from app.engine.anomaly import calibrate
 from app.engine.cosine import build_numeric_matrix
@@ -68,7 +69,7 @@ def _calibrate_anomaly_threshold(
 
     best_hybrid_scores = []
     for src_pos in sample_idx:
-        n_scores = numeric_matrix[src_pos]
+        n_scores = sk_cosine(numeric_matrix[src_pos:src_pos + 1], numeric_matrix)[0]
         t_scores = embeddings @ embeddings[src_pos]
         full_scores = BETA * n_scores + gamma * t_scores
         full_scores[src_pos] = -1  # exclude self

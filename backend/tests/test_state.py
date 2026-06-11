@@ -6,7 +6,7 @@ def test_load_state_returns_expected_keys_and_shapes():
 
     assert len(state["catalog"]) == 11013
     assert state["embeddings"].shape == (11013, 384)
-    assert state["numeric_matrix"].shape == (11013, 11013)
+    assert state["numeric_matrix"].shape == (11013, 4)
 
     assert "cluster_id" in state["catalog_with_features"].columns
     assert len(state["catalog_with_features"]) == len(state["catalog"])

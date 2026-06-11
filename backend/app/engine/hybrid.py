@@ -230,7 +230,7 @@ def score_all_pairs(
     gamma = 1.0 - alpha - beta
 
     j_mat = batch_jaccard_matrix(catalog).astype(np.float32)
-    n_mat = numeric_matrix.astype(np.float32)
+    n_mat = sk_cos(numeric_matrix.astype(np.float32)).astype(np.float32)
     # embeddings are already L2-normalized → dot = cosine
     t_mat = (embeddings @ embeddings.T).astype(np.float32)
 

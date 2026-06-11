@@ -8,6 +8,7 @@ answers and the matched cluster's taste-profile label.
 """
 
 import json
+import math
 import re
 
 from app.agent.llm import _call_llm, _get_client
@@ -75,6 +76,8 @@ def explain_picks(answers: dict, cluster_profile: dict, picks: list[dict], lang:
 def _fallback_pick_explanation(pick: dict, cluster_profile: dict, lang: str) -> str:
     genres = pick.get("genres", "")
     rating = pick.get("rating", "")
+    if isinstance(rating, float) and math.isnan(rating):
+        rating = 0.0
     rating_str = f"{rating:.1f}" if isinstance(rating, float) else str(rating)
     label = cluster_profile.get("label_he" if lang == "he" else "label_en", "")
 

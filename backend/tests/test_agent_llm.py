@@ -79,6 +79,16 @@ def test_fallback_explanation_hebrew_with_seeds():
     assert "Better Call Saul" in text
 
 
+def test_fallback_explanation_handles_nan_rating():
+    intent = {"mood": [], "seeds": []}
+    recs = [{"title": "Nature Untamed", "genres": "Documentary", "rating": float("nan")}]
+    text = llm._fallback_explanation(intent, recs, "en")
+    assert "nan" not in text.lower()
+
+    text_he = llm._fallback_explanation(intent, recs, "he")
+    assert "nan" not in text_he.lower()
+
+
 def test_explain_recommendations_no_results():
     assert llm.explain_recommendations({}, [], "en") == "No matching results found."
     assert llm.explain_recommendations({}, [], "he") == "לא נמצאו תוצאות מתאימות."

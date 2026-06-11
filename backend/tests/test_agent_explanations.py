@@ -34,6 +34,12 @@ def test_explain_picks_no_provider_hebrew_fallback(monkeypatch):
     assert "דרמות פשע" in result[0]
 
 
+def test_fallback_pick_explanation_handles_nan_rating():
+    pick = {"title": "Nature Untamed", "genres": "Documentary", "rating": float("nan")}
+    text = explanations._fallback_pick_explanation(pick, _sample_profile(), "en")
+    assert "nan" not in text.lower()
+
+
 def test_explain_picks_with_provider_returns_llm_array(monkeypatch):
     monkeypatch.setattr(explanations, "_get_client", lambda: True)
     monkeypatch.setattr(

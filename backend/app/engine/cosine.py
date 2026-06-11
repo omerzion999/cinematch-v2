@@ -23,8 +23,7 @@ NUMERIC_COLS = ["rating_z", "votes_z", "start_year_z", "popularity_z"]
 
 
 def _numeric_matrix(catalog: pd.DataFrame) -> np.ndarray:
-    X = catalog[NUMERIC_COLS].fillna(0).values.astype(np.float32)
-    return sk_cosine(X).astype(np.float32)
+    return catalog[NUMERIC_COLS].fillna(0).values.astype(np.float32)
 
 
 def top_k_cosine_numeric(
@@ -45,7 +44,7 @@ def top_k_cosine_numeric(
     q_idx = catalog[mask].index[0]
     row_pos = catalog.index.get_loc(q_idx)
 
-    scores_vec = numeric_matrix[row_pos].copy()
+    scores_vec = sk_cosine(numeric_matrix[row_pos:row_pos + 1], numeric_matrix)[0]
     scores_vec[row_pos] = -1
 
     top_pos = np.argsort(-scores_vec)[:k + len(exclude_titles) + 1]
