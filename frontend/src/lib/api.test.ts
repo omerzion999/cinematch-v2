@@ -123,4 +123,14 @@ describe("api client", () => {
       status: 500,
     });
   });
+
+  it("propagates a network-level fetch rejection", async () => {
+    vi.mocked(fetch).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const request: RecommendRequest = {
+      answers: { genre: "any", length: "any", era: "any", tone: "any", popularity: "any" },
+      lang: "he",
+    };
+
+    await expect(postRecommend(request)).rejects.toThrow("Failed to fetch");
+  });
 });
