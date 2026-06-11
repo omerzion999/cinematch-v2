@@ -53,6 +53,23 @@ def test_regex_parse_year_boundaries():
     assert result2["era_pref"] == "classic"
 
 
+def test_regex_parse_year_and_later_phrasing():
+    result = llm._regex_parse("year 2020 and later")
+    assert result["year_min"] == 2020
+    assert result["era_pref"] == "recent"
+
+    result_he = llm._regex_parse("שנה 2015 ומאוחר יותר")
+    assert result_he["year_min"] == 2015
+
+
+def test_regex_parse_year_and_earlier_phrasing():
+    result = llm._regex_parse("year 2010 and earlier")
+    assert result["year_max"] == 2010
+
+    result_he = llm._regex_parse("שנה 2005 ומוקדם יותר")
+    assert result_he["year_max"] == 2005
+
+
 def test_detect_followup_type_other_and_shorter():
     assert llm._detect_followup_type("show me other options") == "other"
     assert llm._detect_followup_type("something shorter please") == "shorter"
@@ -111,6 +128,27 @@ def test_chat_turn_fast_followup_shorter(monkeypatch):
     result = llm.chat_turn(conversation, prev_recs=prev_recs, lang="en")
     assert result["action"] == "refine"
     assert result["intent"]["length_pref"] == "short"
+
+
+def test_chat_turn_fast_followup_not_too_many_seasons(monkeypatch):
+    monkeypatch.setattr(llm, "_get_client", lambda: None)
+    monkeypatch.setattr(llm, "_provider", None)
+    conversation = [{"role": "user", "content": "not too many seasons"}]
+    prev_recs = [{"title": "Show A", "genres": "Drama", "decade_str": "2010s", "rating": 8.0, "overview": "..."}]
+    result = llm.chat_turn(conversation, prev_recs=prev_recs, lang="en")
+    assert result["action"] == "refine"
+    assert result["intent"]["length_pref"] == "short"
+
+
+def test_chat_turn_fast_followup_year_filter(monkeypatch):
+    monkeypatch.setattr(llm, "_get_client", lambda: None)
+    monkeypatch.setattr(llm, "_provider", None)
+    conversation = [{"role": "user", "content": "year 2020 and later"}]
+    prev_recs = [{"title": "Show A", "genres": "Drama", "decade_str": "2010s", "rating": 8.0, "overview": "..."}]
+    result = llm.chat_turn(conversation, prev_recs=prev_recs, lang="en")
+    assert result["action"] == "refine"
+    assert result["intent"]["year_min"] == 2020
+    assert result["intent"]["era_pref"] == "recent"
 
 
 def test_is_gibberish_flags_only_obvious_keyboard_mashing():

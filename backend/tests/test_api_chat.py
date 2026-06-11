@@ -100,6 +100,100 @@ def test_chat_refine_excludes_previously_shown_titles(client, monkeypatch):
     assert first_titles.isdisjoint(second_titles)
 
 
+def test_chat_refine_with_year_filter_returns_only_recent_shows(client, monkeypatch):
+    monkeypatch.setattr(
+        chat_module,
+        "chat_turn",
+        lambda conversation, prev_recs=None, lang="he": {
+            "action": "search",
+            "intent": _search_intent("recommend something"),
+            "reply": "Try these:",
+            "follow_up": "",
+        },
+    )
+    first = client.post(
+        "/api/chat",
+        json={"conversation": [{"role": "user", "content": "recommend something"}], "lang": "en"},
+    )
+    first_recs = first.json()["recommendations"]
+    assert len(first_recs) == 3
+
+    refine_intent = _search_intent("year 2020 and later")
+    refine_intent["year_min"] = 2020
+    refine_intent["era_pref"] = "recent"
+    monkeypatch.setattr(
+        chat_module,
+        "chat_turn",
+        lambda conversation, prev_recs=None, lang="he": {
+            "action": "refine",
+            "intent": refine_intent,
+            "reply": "Got it, here's something newer:",
+            "follow_up": "",
+        },
+    )
+    second = client.post(
+        "/api/chat",
+        json={
+            "conversation": [{"role": "user", "content": "year 2020 and later"}],
+            "prev_recs": first_recs,
+            "lang": "en",
+        },
+    )
+    assert second.status_code == 200
+    second_recs = second.json()["recommendations"]
+    assert second_recs
+    assert all(r["decade_str"] == "2020s" for r in second_recs)
+    first_titles = {r["title"] for r in first_recs}
+    second_titles = {r["title"] for r in second_recs}
+    assert first_titles.isdisjoint(second_titles)
+
+
+def test_chat_refine_with_short_length_pref_returns_few_seasons(client, monkeypatch):
+    monkeypatch.setattr(
+        chat_module,
+        "chat_turn",
+        lambda conversation, prev_recs=None, lang="he": {
+            "action": "search",
+            "intent": _search_intent("recommend something"),
+            "reply": "Try these:",
+            "follow_up": "",
+        },
+    )
+    first = client.post(
+        "/api/chat",
+        json={"conversation": [{"role": "user", "content": "recommend something"}], "lang": "en"},
+    )
+    first_recs = first.json()["recommendations"]
+    assert len(first_recs) == 3
+
+    refine_intent = _search_intent("not too many seasons")
+    refine_intent["length_pref"] = "short"
+    monkeypatch.setattr(
+        chat_module,
+        "chat_turn",
+        lambda conversation, prev_recs=None, lang="he": {
+            "action": "refine",
+            "intent": refine_intent,
+            "reply": "Sure, here's something more bite-sized:",
+            "follow_up": "",
+        },
+    )
+    second = client.post(
+        "/api/chat",
+        json={
+            "conversation": [{"role": "user", "content": "not too many seasons"}],
+            "prev_recs": first_recs,
+            "lang": "en",
+        },
+    )
+    assert second.status_code == 200
+    second_recs = second.json()["recommendations"]
+    assert second_recs
+    assert all(
+        r["num_seasons"] is None or r["num_seasons"] <= 2 for r in second_recs
+    )
+
+
 def test_chat_search_with_israeli_language_pref_returns_hebrew_titles(client, monkeypatch):
     monkeypatch.setattr(
         chat_module,

@@ -8,7 +8,7 @@ from app.agent.llm import chat_turn, explain_recommendations
 from app.clustering.onboarding_map import build_user_vector, intent_to_onboarding_answers
 from app.clustering.recommend import nearest_cluster, recommend_from_cluster
 from app.engine.anomaly import is_anomalous
-from app.engine.hybrid import recommend as hybrid_recommend
+from app.engine.hybrid import apply_filters, recommend as hybrid_recommend
 from app.i18n import t
 
 router = APIRouter()
@@ -67,7 +67,7 @@ def _find_catalog_index(catalog: pd.DataFrame, title: str) -> int | None:
     return int(matches[0])
 
 
-def _seed_based_picks(state, seed_title, lang, exclude_titles, top_n=3):
+def _seed_based_picks(state, seed_title, lang, exclude_titles, top_n=3, filters=None):
     catalog = state["catalog"]
     idx = _find_catalog_index(catalog, seed_title)
     if idx is None:
@@ -82,6 +82,7 @@ def _seed_based_picks(state, seed_title, lang, exclude_titles, top_n=3):
         top_n=top_n,
         exclude_titles=exclude_titles,
         query_lang=lang,
+        filters=filters,
     )
     if df.empty:
         return df
@@ -96,8 +97,9 @@ def _cluster_based_picks(state, intent, exclude_titles, top_n=3):
     cluster_id = nearest_cluster(
         vector, mask, state["cluster_centroids"], state["cluster_profiles"]
     )
+    catalog = apply_filters(state["catalog_with_features"], intent)
     return recommend_from_cluster(
-        state["catalog_with_features"], cluster_id, vector, mask,
+        catalog, cluster_id, vector, mask,
         top_n=top_n, exclude_titles=list(exclude_titles),
     )
 
@@ -110,12 +112,14 @@ def _language_filtered_picks(state, language: str, exclude_titles, top_n=3) -> p
     return df.sort_values("rating", ascending=False, na_position="last").head(top_n)
 
 
-def _picks_for_intent(state, intent, lang, exclude_titles, top_n=3):
+def _picks_for_intent(state, intent, lang, exclude_titles, top_n=3, prev_recs=None):
     if intent.get("language_pref") == "he":
         return _language_filtered_picks(state, "he", exclude_titles, top_n)
     seeds = intent.get("seeds") or []
+    if not seeds and prev_recs:
+        seeds = [prev_recs[0]["title"]]
     if seeds:
-        picks = _seed_based_picks(state, seeds[0], lang, exclude_titles, top_n)
+        picks = _seed_based_picks(state, seeds[0], lang, exclude_titles, top_n, filters=intent)
         if not picks.empty:
             return picks
     return _cluster_based_picks(state, intent, exclude_titles, top_n)
@@ -138,15 +142,18 @@ def chat(payload: ChatRequest, request: Request) -> ChatResponse:
 
     if action == "swap_slot":
         slot_index = result["swap_slot_index"]
-        new_picks = _picks_for_intent(state, intent, payload.lang, exclude_titles, top_n=1)
         cards = list(payload.prev_recs or [])
+        swap_seed = [{"title": cards[slot_index].title}] if cards else None
+        new_picks = _picks_for_intent(
+            state, intent, payload.lang, exclude_titles, top_n=1, prev_recs=swap_seed
+        )
         if new_picks.empty:
             return ChatResponse(reply=t("not_in_catalog", payload.lang), recommendations=cards)
         cards[slot_index] = _to_rec_cards(new_picks)[0]
         return ChatResponse(reply=result["reply"], recommendations=cards)
 
     # action in ("search", "refine")
-    picks = _picks_for_intent(state, intent, payload.lang, exclude_titles, top_n=3)
+    picks = _picks_for_intent(state, intent, payload.lang, exclude_titles, top_n=3, prev_recs=prev_recs)
     if picks.empty:
         return ChatResponse(reply=t("not_in_catalog", payload.lang))
 

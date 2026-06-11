@@ -228,9 +228,14 @@ def _regex_parse(query: str) -> dict:
     # length_pref
     if re.search(r"\bone season\b|עונה אחת", q, re.IGNORECASE):
         length_pref = "limited"
-    elif re.search(r"\b(short|קצר|mini|limited|פחות פרקים|fewer episodes)\b", q, re.IGNORECASE):
+    elif re.search(
+        r"\b(short|shorter|קצר|קצרות|קצרה|קצרים|mini|limited|פחות פרקים|fewer episodes"
+        r"|not too many seasons|not many seasons|fewer seasons"
+        r"|לא הרבה עונות|לא יותר מדי עונות|לא הרבה פרקים)\b",
+        q, re.IGNORECASE,
+    ):
         length_pref = "short"
-    elif re.search(r"\b(long|ארוך|epic|longer|many seasons|הרבה עונות)\b", q, re.IGNORECASE):
+    elif re.search(r"\b(long|longer|ארוך|epic|many seasons|הרבה עונות)\b", q, re.IGNORECASE):
         length_pref = "long"
     else:
         length_pref = "any"
@@ -258,16 +263,21 @@ def _regex_parse(query: str) -> dict:
     year_max = None
     _from_m = re.search(
         r"(?:from|after|since|משנת|אחרי|מ-?|החל מ)\s*((?:19|20)\d{2})"
-        r"|(?:year\s+)?((?:19|20)\d{2})\s+(?:and\s+(?:more|later|up|above|onwards?)|ומעלה|ואילך)",
+        r"|(?:year\s+)?((?:19|20)\d{2})\s+(?:and\s+(?:more|later|up|above|onwards?)"
+        r"|ומעלה|ואילך|ומאוחר\s+יותר)",
         q, re.IGNORECASE)
     if _from_m:
         yr = int(next(g for g in _from_m.groups() if g))
         year_min = yr
     _to_m = re.search(
-        r"(?:before|until|up\s+to|לפני|עד)\s*((?:19|20)\d{2})",
+        r"(?:before|until|up\s+to|לפני|עד)\s*((?:19|20)\d{2})"
+        r"|(?:year\s+)?((?:19|20)\d{2})\s+(?:and\s+(?:earlier|before)|ומוקדם\s+יותר)",
         q, re.IGNORECASE)
     if _to_m:
-        year_max = int(_to_m.group(1)) - 1  # "before 2000" → max 1999
+        if _to_m.group(1):
+            year_max = int(_to_m.group(1)) - 1  # "before 2000" → max 1999
+        else:
+            year_max = int(_to_m.group(2))  # "2010 and earlier" → max 2010 (inclusive)
 
     # era_pref (derived from year_min or explicit decade keywords)
     if year_min and year_min >= 2020:
@@ -532,6 +542,11 @@ Reply with valid JSON only. No markdown fences, no prose around it.
     "seeds": [],
     "mood": [],
     "length_pref": "short" | "long" | "any",
+    "year_min": <integer year or null>,
+    "year_max": <integer year or null>,
+    "era_pref": "classic" | "1990s" | "2000s" | "2010s" | "recent" | "any",
+    "rating_min": <number or null>,
+    "popularity_pref": "trending" | "hidden_gem" | "well_known" | "any",
     "exclude_genres": [],
     "lang": "he" | "en",
     "language_pref": "he" | "any",
@@ -545,6 +560,17 @@ Hebrew-language shows/movies (e.g. "israeli series", "סדרות ישראליו�
 "תוכן בעברית", "Hebrew shows"). Otherwise leave as "any". This describes the
 ORIGIN of the content, not the language of the conversation, do not set "he"
 just because the chat itself is in Hebrew.
+
+year_min / year_max / era_pref: set ONLY when the user names a specific year
+or era. "from 2020", "year 2020 and later", "after 2015", "אחרי 2020", "2020
+ומעלה" -> year_min=2020 (and era_pref="recent" if >= 2020). "before 2010",
+"לפני 2010" -> year_max=2009. Otherwise leave both null and era_pref "any".
+
+rating_min / popularity_pref: set ONLY when the user explicitly asks for
+highly-rated ("highly rated", "best", "מדורג גבוה" -> rating_min=8.5),
+hidden gems ("hidden gem", "underrated", "אוצר נסתר" -> popularity_pref=
+"hidden_gem"), or well-known/trending hits ("popular", "famous", "פופולרי"
+-> popularity_pref="trending"). Otherwise leave at null / "any".
 
 BIAS TOWARD ACTION (STRICT)
 - If the user expresses ANY interest in watching something (names a genre, mood, vibe, format, or says things like "recommend me something funny" / "אשמח להמלצות על סדרות מצחיקות"), use action "search" (or "refine"/"swap_slot" when appropriate) RIGHT AWAY. Do NOT respond with a clarifying question first.
@@ -572,13 +598,19 @@ ACTION GUIDE
   Write a warm 1-sentence intro in `reply`, like "Sure, here are a few that match that vibe:" or "Got it, try these:".
   Fill intent.seeds with any titles the user mentioned. Fill mood / length_pref / exclude_genres if hinted. intent.free_text should capture the gist in plain text.
 
-"refine" — Use when there are recommendations on screen and the user wants to ADJUST them (not replace one). Examples:
-  - shorter
+"refine" — Use when there are recommendations on screen and the user wants DIFFERENT/NEW recommendations that better match an updated preference (this REPLACES the on-screen picks, it does not adjust them in place). Examples:
+  - shorter / not too many seasons / fewer episodes
   - less dark
   - in spanish
   - more options, something different
   - more like the first one
-  Write a warm 1-sentence intro in `reply`. Fill intent to capture the refinement (e.g. length_pref="short", or seeds=[first_rec_title]).
+  - a year or era constraint: "year 2020 and later", "from 2015", "before 2000", "אחרי 2020", "לפני 2010"
+  - a rating or popularity constraint: "something highly rated", "a hidden gem"
+  Write a warm 1-sentence intro in `reply` (e.g. "Got it, here's something newer:" / "Sure, here's something shorter:"). Fill intent to capture ONLY the new constraint (length_pref, year_min/year_max/era_pref, rating_min, popularity_pref, mood, exclude_genres, or seeds=[first_rec_title] for "more like the first one"). The recommendation engine will silently fetch brand-new picks satisfying this constraint and replace what's on screen.
+
+CRITICAL: NEVER EXPLAIN OR DISCUSS WHY THE ON-SCREEN PICKS DON'T MATCH A NEW REQUEST
+- If the user states ANY new preference after recommendations are already shown, even one phrased as a complaint about the current picks ("these are too old", "give me 2020 and later", "these have too many seasons"), this is ALWAYS action "refine" (or "search" if it is a totally new topic). NEVER action "chat".
+- Do NOT critique, evaluate, or write paragraphs about why the CURRENT on-screen shows fail to satisfy the new request. That is exactly the WRONG behavior. Just set the right intent fields and write a short generic `reply` like "Got it, here you go:". The engine handles fetching shows that actually satisfy the constraint.
 
 "swap_slot" — Use when the user wants to replace ONE specific card in prev_recs. Examples:
   - I already watched the third one
@@ -639,6 +671,18 @@ User: "recommend me a dark thriller"
 
 User: "shorter"  (with prev_recs present)
 {"action":"refine","reply":"On it:","intent":{"seeds":[],"mood":[],"length_pref":"short","exclude_genres":[],"lang":"en","free_text":"shorter shows"}}
+
+User: "year 2020 and later"  (with prev_recs present, LANGUAGE: en)
+{"action":"refine","reply":"Got it, here's something newer:","intent":{"seeds":[],"mood":[],"length_pref":"any","year_min":2020,"year_max":null,"era_pref":"recent","rating_min":null,"popularity_pref":"any","exclude_genres":[],"lang":"en","language_pref":"any","free_text":"shows from 2020 and later"}}
+
+User: "not too many seasons"  (with prev_recs present, LANGUAGE: en)
+{"action":"refine","reply":"Sure, here's something more bite-sized:","intent":{"seeds":[],"mood":[],"length_pref":"short","year_min":null,"year_max":null,"era_pref":"any","rating_min":null,"popularity_pref":"any","exclude_genres":[],"lang":"en","language_pref":"any","free_text":"fewer seasons"}}
+
+User: "תביא משהו מ2015 ואילך"  (with prev_recs present, LANGUAGE: he)
+{"action":"refine","reply":"בטח, הנה משהו חדש יותר:","intent":{"seeds":[],"mood":[],"length_pref":"any","year_min":2015,"year_max":null,"era_pref":"any","rating_min":null,"popularity_pref":"any","exclude_genres":[],"lang":"he","language_pref":"any","free_text":"shows from 2015 onwards"}}
+
+User: "more options"  (with prev_recs present, LANGUAGE: en)
+{"action":"refine","reply":"Sure, here are some more:","intent":{"seeds":[],"mood":[],"length_pref":"any","year_min":null,"year_max":null,"era_pref":"any","rating_min":null,"popularity_pref":"any","exclude_genres":[],"lang":"en","language_pref":"any","free_text":"more recommendation options"}}
 
 User: "I already watched the third one"  (with prev_recs present)
 {"action":"swap_slot","reply":"Swapping the third.","intent":{"seeds":[],"mood":[],"length_pref":"any","exclude_genres":[],"lang":"en","free_text":"already watched #3"},"swap_slot_index":2}
@@ -723,23 +767,35 @@ def chat_turn(
     # Only fires when prev_recs exist, so chitchat is always sent to the LLM.
     if prev_recs:
         followup_type = _detect_followup_type(last_user)
-        if followup_type:
+        has_explicit_filter = any([
+            fallback.get("year_min"),
+            fallback.get("year_max"),
+            fallback.get("era_pref") not in (None, "any"),
+            fallback.get("rating_min"),
+            fallback.get("popularity_pref") not in (None, "any"),
+            fallback.get("length_pref") not in (None, "any"),
+        ])
+        if followup_type or has_explicit_filter:
             base_intent = {
-                "seeds": [], "mood": [], "length_pref": "any",
-                "exclude_genres": [], "lang": detected_lang, "free_text": last_user,
+                "seeds": [], "mood": [], "length_pref": fallback.get("length_pref", "any"),
+                "exclude_genres": [], "lang": detected_lang,
+                "language_pref": "any", "free_text": last_user,
+                "year_min": fallback.get("year_min"),
+                "year_max": fallback.get("year_max"),
+                "era_pref": fallback.get("era_pref", "any"),
+                "rating_min": fallback.get("rating_min"),
+                "popularity_pref": fallback.get("popularity_pref", "any"),
             }
             if followup_type == "other":
-                return {"action": "refine", "intent": base_intent, "reply": "", "follow_up": ""}
+                pass
             elif followup_type == "shorter":
                 base_intent["length_pref"] = "short"
-                return {"action": "refine", "intent": base_intent, "reply": "", "follow_up": ""}
             elif followup_type == "lighter":
                 base_intent["exclude_genres"] = ["thriller", "horror", "crime"]
                 base_intent["mood"] = ["light", "funny"]
-                return {"action": "refine", "intent": base_intent, "reply": "", "follow_up": ""}
             elif followup_type == "foreign":
                 base_intent["foreign_only"] = True
-                return {"action": "refine", "intent": base_intent, "reply": "", "follow_up": ""}
+            return {"action": "refine", "intent": base_intent, "reply": "", "follow_up": ""}
 
     # ── Gibberish fast-path (no LLM) ──────────────────────────────────────────
     # Low threshold: only fires for obvious keyboard-mashing (see _is_gibberish).
@@ -822,6 +878,11 @@ def chat_turn(
             intent.setdefault("lang", detected_lang)
             intent.setdefault("language_pref", "any")
             intent.setdefault("free_text", last_user)
+            intent.setdefault("year_min", None)
+            intent.setdefault("year_max", None)
+            intent.setdefault("era_pref", "any")
+            intent.setdefault("rating_min", None)
+            intent.setdefault("popularity_pref", "any")
             if intent.get("language_pref") not in ("he", "any"):
                 intent["language_pref"] = "any"
             result["intent"] = intent

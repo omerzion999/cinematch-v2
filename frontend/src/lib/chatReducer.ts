@@ -246,10 +246,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
 
     case "TOGGLE_LANG":
-      // Existing message content (onboarding prompts, replies, etc.) was
-      // generated in the old language and cannot be retranslated in place,
-      // so switching languages starts a fresh conversation in the new one.
-      return createInitialState(state.lang === "he" ? "en" : "he");
+      // Only flips the UI language (labels, placeholders, direction).
+      // The conversation itself is preserved as-is.
+      return { ...state, lang: state.lang === "he" ? "en" : "he" };
 
     case "RESTORE":
       return action.state;

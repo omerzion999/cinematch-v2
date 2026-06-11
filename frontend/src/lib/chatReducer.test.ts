@@ -7,7 +7,6 @@ import {
   type RecommendationsMessage,
   type TextMessage,
 } from "./chatReducer";
-import { UI_STRINGS } from "./i18n";
 import { ONBOARDING_QUESTIONS } from "./onboarding";
 import type { RecCard } from "./types";
 
@@ -207,19 +206,26 @@ describe("chatReducer", () => {
     expect(last.content).toBe("שגיאה זמנית");
   });
 
-  it("TOGGLE_LANG flips between he and en and restarts the conversation in that language", () => {
-    const state = createInitialState("he");
+  it("TOGGLE_LANG only flips the UI language and preserves the conversation as-is", () => {
+    const userMessage: TextMessage = { id: "u1", type: "text", role: "user", content: "hi" };
+    const state: ChatState = {
+      ...createInitialState("he"),
+      phase: "chat",
+      messages: [...createInitialState("he").messages, userMessage],
+      prevRecs: [SAMPLE_CARD],
+    };
 
     const next = chatReducer(state, { type: "TOGGLE_LANG" });
     expect(next.lang).toBe("en");
-    expect(next.phase).toBe("intro");
-    const nextGreeting = next.messages[0] as ChoiceMessage;
-    expect(nextGreeting.prompt).toBe(UI_STRINGS.en.openingMessage);
+    expect(next.phase).toBe(state.phase);
+    expect(next.messages).toEqual(state.messages);
+    expect(next.prevRecs).toEqual(state.prevRecs);
+    expect(next.onboardingStepIndex).toBe(state.onboardingStepIndex);
+    expect(next.onboardingAnswers).toEqual(state.onboardingAnswers);
 
     const back = chatReducer(next, { type: "TOGGLE_LANG" });
     expect(back.lang).toBe("he");
-    const backGreeting = back.messages[0] as ChoiceMessage;
-    expect(backGreeting.prompt).toBe(UI_STRINGS.he.openingMessage);
+    expect(back.messages).toEqual(state.messages);
   });
 
   it("RESTORE replaces the entire state (used to load persisted state)", () => {
