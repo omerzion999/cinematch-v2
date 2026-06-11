@@ -59,7 +59,8 @@ export type ChatAction =
     }
   | { type: "CHAT_ERROR"; message: string }
   | { type: "TOGGLE_LANG" }
-  | { type: "RESTORE"; state: ChatState };
+  | { type: "RESTORE"; state: ChatState }
+  | { type: "RESET_CONVERSATION" };
 
 const DEFAULT_ONBOARDING_ANSWERS: OnboardingAnswers = {
   genre: "any",
@@ -246,6 +247,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     case "RESTORE":
       return action.state;
+
+    case "RESET_CONVERSATION":
+      return createInitialState(state.lang);
 
     default: {
       const _exhaustive: never = action;

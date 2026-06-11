@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowRight, ArrowLeft, RotateCcw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -77,14 +77,25 @@ export function ChatWindow() {
             </span>
             <Sparkles className="h-4 w-4 text-primary" />
           </h1>
-          <Button
-            variant="outline"
-            size="sm"
-            className="rounded-full border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
-            onClick={() => dispatch({ type: "TOGGLE_LANG" })}
-          >
-            {strings.languageToggleLabel}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              className="rounded-full border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
+              onClick={() => dispatch({ type: "RESET_CONVERSATION" })}
+            >
+              <RotateCcw className="h-4 w-4" />
+              <span className="sr-only">{strings.newConversation}</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
+              onClick={() => dispatch({ type: "TOGGLE_LANG" })}
+            >
+              {strings.languageToggleLabel}
+            </Button>
+          </div>
         </header>
 
         <ScrollArea className="flex-1 p-3">

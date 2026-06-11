@@ -508,16 +508,22 @@ Reply with valid JSON only. No markdown fences, no prose around it.
   "swap_slot_index": <0-based integer 0..4, only when action is swap_slot>
 }
 
+BIAS TOWARD ACTION (STRICT)
+- If the user expresses ANY interest in watching something (names a genre, mood, vibe, format, or says things like "recommend me something funny" / "אשמח להמלצות על סדרות מצחיקות"), use action "search" (or "refine"/"swap_slot" when appropriate) RIGHT AWAY. Do NOT respond with a clarifying question first.
+- Showing 3 picks is always better than asking another question. The user can always ask for something different afterward, that is what "refine" and "more_options" are for.
+- Only use "chat" with a clarifying question when the message gives you genuinely nothing to search on: pure greetings, thanks/acknowledgements, or truly unclear gibberish. "I want something funny" is NOT unclear, it is a mood, use action "search" with mood=["funny"].
+- If the user replies with a single short word that narrows down a topic you JUST asked about (e.g. you asked "rom-com or sitcom?" and they said "sitcom"), treat that as the answer and use action "search" (fold the word into mood/free_text), do not ask yet another question.
+
 ACTION GUIDE
 
-"chat" — Use when the user is NOT asking for a fresh recommendation right now. This is the MOST COMMON action. Examples:
+"chat" — Use when the user is NOT asking for a fresh recommendation right now. Examples:
   - Greetings and chitchat (hi, thanks, how are you)
   - Off-topic asks (pasta recipe, weather, math, code, news). Politely redirect, mention your purpose, offer to find something to watch. NEVER offer to help with the off-topic thing.
   - Opinions on a specific show or movie (what do you think about The Office, is Seinfeld good)
   - Availability (where can I watch Breaking Bad). Use your general knowledge, be honest if you are unsure. Add a soft caveat like "last I checked it was on X, but availability shifts often."
   - Questions about a show already in prev_recs (plot, cast, season count). Answer from the data shown.
   - Jokes about shows or movies are fine. Generic jokes — keep them light and TV/movie themed if possible.
-  - Gibberish or confused input. Ask a friendly clarifying question about what they want to watch.
+  - Gibberish or confused input with no salvageable preference. Ask a friendly clarifying question about what they want to watch.
   Set intent.lang correctly. Other intent fields can be empty.
 
 "search" — Use when the user clearly wants a NEW recommendation. The catalog will be searched after your reply. Examples:
@@ -546,7 +552,8 @@ ACTION GUIDE
 STYLE RULES (STRICT)
 - BREVITY (STRICT). Reply in 1 sentence whenever possible. 2 sentences only when truly needed. NEVER more than 2 sentences. No preambles, no "great question", no "let me explain". Just the answer. Long replies are wrong replies.
 - NEVER use the em dash character. Use commas, colons, parentheses, or periods instead. This applies to every part of the JSON.
-- Match the user's language. Hebrew query, Hebrew reply. English query, English reply.
+- LANGUAGE CONSISTENCY (STRICT). The conversation transcript will tell you which language to reply in (look for a line starting with "LANGUAGE:"). Write the ENTIRE `reply` in that language, even if the user's most recent message is short, a single word, or in a different language (e.g. an English show title or genre word inside an otherwise Hebrew conversation). NEVER mix languages and NEVER switch language mid-conversation.
+- HEBREW QUALITY (STRICT). When replying in Hebrew, write natural, fluent, everyday spoken Israeli Hebrew, the way a person texts a friend. Do NOT produce stiff, literal, or grammatically awkward translations from English. Avoid robotic phrasings like "יש כלום חדש לדבר על" or "מה ההעדפה שלך". Prefer simple, correct, casual phrasing such as "מה בא לך לראות?", "על איזה כיוון חשבת?", "אהבת קומדיות או יותר דרמה?".
 - Do not use markdown formatting in `reply` except occasional **bold** for show titles.
 - Sound like a real person.
 
@@ -600,7 +607,43 @@ User: "I already watched the third one"  (with prev_recs present)
 
 User (after Breaking Bad was discussed earlier): "what was that actor's name again"
 {"action":"chat","reply":"Bryan Cranston played Walter White in Breaking Bad.","intent":{"seeds":["Breaking Bad"],"mood":[],"length_pref":"any","exclude_genres":[],"lang":"en","free_text":"actor name question"}}
+
+User: "היי מה שלומך?"
+{"action":"chat","reply":"היי, הכל טוב! מה בא לך לראות היום?","intent":{"seeds":[],"mood":[],"length_pref":"any","exclude_genres":[],"lang":"he","free_text":"greeting"}}
+
+User: "אשמח להמלצות על סדרות מצחיקות"
+{"action":"search","reply":"בטח, הנה כמה אופציות:","intent":{"seeds":[],"mood":["funny"],"length_pref":"any","exclude_genres":[],"lang":"he","free_text":"comedy recommendations"}}
+
+User: "sitcom"  (LANGUAGE: he, replying to a previous question about what kind of comedy)
+{"action":"search","reply":"מעולה, הנה כמה סיטקומים:","intent":{"seeds":[],"mood":["funny","sitcom"],"length_pref":"any","exclude_genres":[],"lang":"he","free_text":"sitcom recommendations"}}
+
+User: "קצרות יותר"  (with prev_recs present, LANGUAGE: he)
+{"action":"refine","reply":"סבבה, הנה משהו קצר יותר:","intent":{"seeds":[],"mood":[],"length_pref":"short","exclude_genres":[],"lang":"he","free_text":"shorter shows"}}
 """
+
+
+_HEBREW_RE = re.compile(r"[֐-׿]")
+
+
+def _conversation_lang(conversation: list[dict], ui_lang: str) -> str:
+    """
+    Determines the language the conversation has been conducted in so far.
+
+    Hebrew is a sticky signal: if the user has written Hebrew anywhere in the
+    conversation, treat the whole conversation as Hebrew, even if the most
+    recent message is a short English word (a genre like "sitcom" or a show
+    title). This prevents the bot from flipping to English mid-conversation
+    just because the latest message happens to use Latin characters.
+    """
+    if any(
+        m["role"] == "user" and _HEBREW_RE.search(m.get("content", ""))
+        for m in conversation
+    ):
+        return "he"
+    last_user = next(
+        (m["content"] for m in reversed(conversation) if m["role"] == "user"), ""
+    )
+    return "en" if last_user.strip() else ui_lang
 
 
 def chat_turn(
@@ -623,7 +666,8 @@ def chat_turn(
         (m["content"] for m in reversed(conversation) if m["role"] == "user"), ""
     )
     fallback = _regex_parse(last_user)
-    detected_lang = fallback.get("lang", lang)
+    detected_lang = _conversation_lang(conversation, lang)
+    fallback["lang"] = detected_lang
 
     # ── Fast follow-up keyword path (no LLM) for trivial refinements ──────────
     # Only fires when prev_recs exist, so chitchat is always sent to the LLM.
@@ -670,9 +714,15 @@ def chat_turn(
         if m.get("content")
     )
 
+    language_directive = (
+        "LANGUAGE: he (write the entire `reply` in natural, fluent, casual Hebrew)"
+        if detected_lang == "he"
+        else "LANGUAGE: en (write the entire `reply` in English)"
+    )
+
     raw = _call_llm(
         _CHAT_SYSTEM,
-        f"Conversation transcript:\n{conv_text}{recs_ctx}\n\nDecide and respond in JSON only.",
+        f"Conversation transcript:\n{conv_text}{recs_ctx}\n\n{language_directive}\n\nDecide and respond in JSON only.",
         max_tokens=600,
         model=_GROQ_MODEL_CHAT,
     )

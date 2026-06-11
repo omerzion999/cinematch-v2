@@ -223,4 +223,23 @@ describe("chatReducer", () => {
 
     expect(next).toEqual(restored);
   });
+
+  it("RESET_CONVERSATION returns to the initial state, preserving the current language", () => {
+    const userMessage: TextMessage = { id: "u1", type: "text", role: "user", content: "hi" };
+    const state: ChatState = {
+      ...createInitialState("en"),
+      phase: "chat",
+      messages: [...createInitialState("en").messages, userMessage],
+      prevRecs: [SAMPLE_CARD],
+    };
+
+    const next = chatReducer(state, { type: "RESET_CONVERSATION" });
+
+    expect(next.phase).toBe("intro");
+    expect(next.lang).toBe("en");
+    expect(next.prevRecs).toBeNull();
+    expect(next.onboardingStepIndex).toBe(-1);
+    expect(next.messages).toHaveLength(1);
+    expect(next.messages[0].type).toBe("choice");
+  });
 });

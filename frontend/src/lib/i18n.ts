@@ -21,6 +21,7 @@ export const UI_STRINGS: Record<Lang, Record<string, string>> = {
     closeDialog: "סגור חלון",
     detailsLoading: "טוען פרטים נוספים...",
     genericError: "מצטערים, קרתה תקלה. נסה שוב מאוחר יותר.",
+    newConversation: "שיחה חדשה",
   },
   en: {
     openingMessage:
@@ -42,5 +43,6 @@ export const UI_STRINGS: Record<Lang, Record<string, string>> = {
     closeDialog: "Close dialog",
     detailsLoading: "Loading more details...",
     genericError: "Sorry, something went wrong. Please try again later.",
+    newConversation: "New conversation",
   },
 };
