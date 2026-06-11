@@ -12,6 +12,7 @@ def test_load_state_returns_expected_keys_and_shapes():
     assert len(state["catalog_with_features"]) == len(state["catalog"])
 
     assert len(state["feature_dims"]) == 14
+    assert set(state["feature_dims"]).issubset(state["catalog_with_features"].columns)
     assert len(state["cluster_centroids"]) == len(state["cluster_profiles"])
     for centroid in state["cluster_centroids"]:
         assert len(centroid) == 14

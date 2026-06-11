@@ -30,7 +30,8 @@ def load_state() -> dict:
         cluster_profiles = json.load(f)
 
     feature_dims = cluster_centroids["feature_dims"]
-    catalog_with_features = catalog.merge(
+    overlap = [c for c in feature_dims if c in catalog.columns]
+    catalog_with_features = catalog.drop(columns=overlap).merge(
         cluster_labels[["title", "cluster_id"] + feature_dims],
         on="title",
         how="inner",
