@@ -124,8 +124,15 @@ def apply_filters(catalog: pd.DataFrame, filters: dict) -> pd.DataFrame:
         tmp = df[df["rating"].fillna(0) >= rmin]
         if len(tmp) >= 3: df = tmp
 
-    # exclude_genres
     genre_col = "genre_set_str" if "genre_set_str" in df.columns else "genres"
+
+    # include_genres (soft – keep only rows that match at least one genre)
+    for genre in (filters.get("include_genres") or []):
+        tmp = df[df[genre_col].fillna("").str.contains(genre, case=False, na=False)]
+        if len(tmp) >= 3:
+            df = tmp
+
+    # exclude_genres
     for genre in (filters.get("exclude_genres") or []):
         tmp = df[~df[genre_col].fillna("").str.contains(genre, case=False, na=False)]
         if len(tmp) >= 3:

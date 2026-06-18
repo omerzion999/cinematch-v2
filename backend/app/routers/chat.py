@@ -104,17 +104,31 @@ def _cluster_based_picks(state, intent, exclude_titles, top_n=3):
     )
 
 
-def _language_filtered_picks(state, language: str, exclude_titles, top_n=3) -> pd.DataFrame:
+_MOOD_TO_GENRE: dict[str, str] = {
+    "thrilling": "Action",
+    "funny": "Comedy",
+    "emotional": "Drama",
+}
+
+
+def _language_filtered_picks(state, language: str, exclude_titles, top_n=3, intent=None) -> pd.DataFrame:
     catalog = state["catalog"]
     df = catalog[catalog["language"] == language]
     if exclude_titles:
         df = df[~df["title"].isin(exclude_titles)]
+    if intent:
+        df = apply_filters(df, intent)
     return df.sort_values("rating", ascending=False, na_position="last").head(top_n)
 
 
 def _picks_for_intent(state, intent, lang, exclude_titles, top_n=3, prev_recs=None):
+    # Derive genre filter from mood so "action" → filters Action, "funny" → Comedy, etc.
+    mood_genres = [_MOOD_TO_GENRE[m] for m in (intent.get("mood") or []) if m in _MOOD_TO_GENRE]
+    if mood_genres and not intent.get("include_genres"):
+        intent = {**intent, "include_genres": mood_genres}
+
     if intent.get("language_pref") == "he":
-        return _language_filtered_picks(state, "he", exclude_titles, top_n)
+        return _language_filtered_picks(state, "he", exclude_titles, top_n, intent)
     seeds = intent.get("seeds") or []
     if not seeds and prev_recs:
         seeds = [prev_recs[0]["title"]]

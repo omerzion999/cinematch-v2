@@ -213,9 +213,10 @@ def _regex_parse(query: str) -> dict:
 
     mood_map = {
         "dark":      ["dark","אפל","כהה","depressing"],
-        "funny":     ["funny","comedy","fun","מצחיק","הומור","קומדי"],
+        "funny":     ["funny","comedy","fun","מצחיק","הומור","קומדי","sitcom"],
         "emotional": ["emotional","sad","cry","מרגש","עצוב"],
-        "thrilling": ["thriller","thrill","suspense","מותחן","מפחיד","horror"],
+        "thrilling": ["thriller","thrill","suspense","מותחן","מפחיד","horror",
+                      "scary","action","אקשן","אימה","crime","פשע","מתח"],
         "light":     ["light","lighthearted","קליל","קל","cheerful"],
     }
     mood = []
@@ -335,8 +336,23 @@ def _regex_parse(query: str) -> dict:
     else:
         rating_min = None
 
+    # ── Seed extraction ("something like X", "shows like X", "כמו X") ─────────
+    seeds: list[str] = []
+    _seed_m = re.search(
+        r"\b(?:something|shows?|series)\s+like\s+[\"']?([A-Za-z][A-Za-z0-9 :&'.-]{1,40}?)[\"']?(?:\s*[,!?.]|$)"
+        r"|\blike\s+[\"']([A-Za-z][A-Za-z0-9 :&'.-]{1,40}?)[\"']"
+        r"|\bsimilar\s+to\s+[\"']?([A-Za-z][A-Za-z0-9 :&'.-]{1,40}?)[\"']?(?:\s*[,!?.]|$)"
+        r"|כמו\s+[\"']?([^\s,!?.]{2,40})"
+        r"|דומה\s+ל-?[\"']?([^\s,!?.]{2,40})",
+        q, re.IGNORECASE,
+    )
+    if _seed_m:
+        seed_title = next((g for g in _seed_m.groups() if g), "").strip().strip("\"'")
+        if seed_title:
+            seeds = [seed_title]
+
     return {
-        "seeds": [], "mood": mood, "length_pref": length_pref,
+        "seeds": seeds, "mood": mood, "length_pref": length_pref,
         "language_pref": language_pref, "era_pref": era_pref,
         "year_min": year_min, "year_max": year_max,
         "status": status, "popularity_pref": popularity_pref,
@@ -350,6 +366,10 @@ def _regex_parse(query: str) -> dict:
 def explain_recommendations(intent: dict, recommendations: list[dict], lang: str = "en") -> str:
     if not recommendations:
         return "לא נמצאו תוצאות מתאימות." if lang == "he" else "No matching results found."
+
+    # Hebrew LLM quality is inadequate for explanations — use deterministic template
+    if lang == "he":
+        return _fallback_explanation(intent, recommendations, lang)
 
     if not _get_client():
         return _fallback_explanation(intent, recommendations, lang)
@@ -713,10 +733,33 @@ User: "fkjghslkdfjh"  (LANGUAGE: en)
 
 User: "סדגכח כגדשח"  (LANGUAGE: he)
 {"action":"chat","reply":"זה לא ממש ברור לי, מה בא לך לראות?","intent":{"seeds":[],"mood":[],"length_pref":"any","exclude_genres":[],"lang":"he","language_pref":"any","free_text":"unclear input"}}
+
+User: "i want something like The Office"
+{"action":"search","reply":"Sure, shows with a similar vibe:","intent":{"seeds":["The Office"],"mood":["funny"],"length_pref":"any","exclude_genres":[],"lang":"en","language_pref":"any","free_text":"shows like The Office"}}
+
+User: "something like Breaking Bad"
+{"action":"search","reply":"Got it, try these:","intent":{"seeds":["Breaking Bad"],"mood":["dark","thrilling"],"length_pref":"any","exclude_genres":[],"lang":"en","language_pref":"any","free_text":"shows like Breaking Bad"}}
+
+User: "i want a scary movie"
+{"action":"chat","reply":"I only recommend TV series, not movies. Want me to find you a scary series instead?","intent":{"seeds":[],"mood":["thrilling"],"length_pref":"any","exclude_genres":[],"lang":"en","language_pref":"any","free_text":"scary movie redirect"}}
+
+User: "באלי סרט מפחיד"  (LANGUAGE: he)
+{"action":"chat","reply":"אני ממליץ רק על סדרות טלוויזיה, לא על סרטים. רוצה שאמצא לך סדרה מפחידה במקום?","intent":{"seeds":[],"mood":["thrilling"],"length_pref":"any","exclude_genres":[],"lang":"he","language_pref":"any","free_text":"scary movie redirect"}}
+
+User: "באלי סדרה מפחידה"  (LANGUAGE: he)
+{"action":"search","reply":"בטח, הנה כמה סדרות מפחידות:","intent":{"seeds":[],"mood":["thrilling"],"length_pref":"any","exclude_genres":[],"lang":"he","language_pref":"any","free_text":"סדרה מפחידה"}}
+
+User: "אני רוצה סדרות אקשן טובות משנת 2020 ומעלה"  (LANGUAGE: he)
+{"action":"search","reply":"מגניב, הנה כמה סדרות אקשן חדשות:","intent":{"seeds":[],"mood":["thrilling"],"year_min":2020,"year_max":null,"era_pref":"recent","length_pref":"any","exclude_genres":[],"lang":"he","language_pref":"any","free_text":"סדרות אקשן מ-2020"}}
 """
 
 
 _HEBREW_RE = re.compile(r"[֐-׿]")
+_MOVIE_RE = re.compile(r"\b(movie|film|סרט|קולנוע)\b", re.IGNORECASE)
+_SERIES_RE = re.compile(r"\b(series|show|episode|season|סדרה|עונה|פרק)\b", re.IGNORECASE)
+_ISRAELI_RE = re.compile(
+    r"israeli|ישראל|ישראלי|ישראליות|ישראלית|סדרות ישראליות|תוכן ישראלי", re.IGNORECASE
+)
 
 
 def _conversation_lang(conversation: list[dict], ui_lang: str) -> str:
@@ -812,6 +855,20 @@ def chat_turn(
             "follow_up": "",
         }
 
+    # ── Movie pre-check (redirect before LLM, saves a round-trip) ────────────
+    if _MOVIE_RE.search(last_user) and not _SERIES_RE.search(last_user):
+        movie_redirect = (
+            "I only recommend TV series, not movies. Want me to find you a series with a similar vibe?"
+            if detected_lang == "en"
+            else "אני ממליץ רק על סדרות טלוויזיה, לא על סרטים. רוצה שאמצא לך סדרה עם אווירה דומה?"
+        )
+        return {
+            "action": "chat",
+            "intent": {**fallback, "lang": detected_lang, "language_pref": "any"},
+            "reply": movie_redirect,
+            "follow_up": "",
+        }
+
     # ── No LLM available ──────────────────────────────────────────────────────
     if _provider is None:
         return {"action": "search", "intent": fallback, "reply": "", "follow_up": ""}
@@ -885,6 +942,13 @@ def chat_turn(
             intent.setdefault("popularity_pref", "any")
             if intent.get("language_pref") not in ("he", "any"):
                 intent["language_pref"] = "any"
+            # Guard: don't restrict to Israeli shows just because the conversation
+            # is in Hebrew. Only honor language_pref="he" when the user explicitly
+            # asks for Israeli content.
+            if intent.get("language_pref") == "he":
+                combined = (intent.get("free_text", "") + " " + last_user)
+                if not _ISRAELI_RE.search(combined):
+                    intent["language_pref"] = "any"
             result["intent"] = intent
 
             # Validate swap_slot_index when relevant
@@ -905,24 +969,21 @@ def chat_turn(
         except Exception:
             pass
 
-    # LLM call failed (Groq timeout, rate limit, or invalid JSON response).
-    # Previously this fell back to action: search with an empty reply, which
-    # dispatched the SEARCH branch, ran the engine with no real seed, returned
-    # no matches, and surfaced the fake "I couldn't find a strong match" error.
-    # That misled users into thinking the recommender was broken when actually
-    # the LLM itself had hiccuped.
-    #
-    # New behavior: fall back to action: chat with a friendly bilingual reply.
-    # The user sees that the agent had a brief hiccup and can immediately retry.
-    # No empty-seed search, no fake search error, conversational mode preserved.
+    # LLM call failed (Groq timeout, rate limit, or invalid JSON).
+    # If regex already captured mood or seeds, do a search immediately rather
+    # than surfacing a confusing "hiccup" message — the user will see real results.
+    # Only fall back to the error message when there is nothing to search on.
+    fallback["lang"] = detected_lang
+    fallback["language_pref"] = "any"
+    if fallback.get("mood") or fallback.get("seeds"):
+        return {"action": "search", "intent": fallback, "reply": "", "follow_up": ""}
+
     fallback_reply = (
         "Hmm, my brain just hiccuped. What were you looking for?"
-        if lang == "en"
+        if detected_lang == "en"
         else "אופס, רגע קטן. מה חיפשת?"
     )
-    fallback["lang"] = lang
-    return {"action": "chat", "intent": fallback,
-            "reply": fallback_reply, "follow_up": ""}
+    return {"action": "chat", "intent": fallback, "reply": fallback_reply, "follow_up": ""}
 
 
 def _fallback_explanation(intent: dict, recommendations: list[dict], lang: str) -> str:

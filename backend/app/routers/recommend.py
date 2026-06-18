@@ -10,6 +10,7 @@ from app.agent.explanations import explain_picks
 from app.agent.tmdb import search_tv_show
 from app.clustering.onboarding_map import build_user_vector
 from app.clustering.recommend import nearest_cluster, recommend_from_cluster
+from app.engine.hybrid import apply_filters
 from app.i18n import t
 
 router = APIRouter()
@@ -88,7 +89,7 @@ def recommend(payload: RecommendRequest, request: Request) -> RecommendResponse:
     cluster_profile = state["cluster_profiles"][str(cluster_id)]
 
     picks_df = recommend_from_cluster(
-        state["catalog_with_features"], cluster_id, vector, mask, top_n=3
+        state["catalog_with_features"], cluster_id, vector, mask, top_n=10
     )
 
     if picks_df.empty:
@@ -98,6 +99,22 @@ def recommend(payload: RecommendRequest, request: Request) -> RecommendResponse:
             cluster_id=cluster_id,
             recommendations=[],
         )
+
+    # Apply popularity filter on the larger candidate pool, then take top 3
+    popularity = payload.answers.popularity
+    if popularity == "well_known":
+        well_known = picks_df[picks_df["votes"].fillna(0) > 100000]
+        if not well_known.empty:
+            picks_df = well_known
+    elif popularity == "hidden_gem":
+        hidden = picks_df[
+            (picks_df["votes"].fillna(0) < 10000) & (picks_df["rating"].fillna(0) > 7.5)
+        ]
+        if not hidden.empty:
+            picks_df = hidden
+    elif popularity == "trending":
+        picks_df = picks_df.sort_values("popularity", ascending=False)
+    picks_df = picks_df.head(3)
 
     picks = picks_df.to_dict(orient="records")
     explanations = explain_picks(answers, cluster_profile, picks, lang)
