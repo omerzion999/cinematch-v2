@@ -13,3 +13,6 @@ venv/
 
 # Environment files
 .env
+
+# Large regenerable data export (the zip is the committed deliverable)
+docs/analysis/catalog_post_manipulation.csv
