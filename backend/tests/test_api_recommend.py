@@ -49,12 +49,12 @@ def test_recommend_invalid_answer_value_returns_422(client):
     assert response.status_code == 422
 
 
-def test_recommend_no_picks_in_a_cluster_returns_no_recommendations_message(client, monkeypatch):
+def test_recommend_no_picks_returns_no_recommendations_message(client, monkeypatch):
     import app.routers.recommend as recommend_module
 
     monkeypatch.setattr(
         recommend_module,
-        "recommend_from_cluster",
+        "rank_by_preferences",
         lambda *args, **kwargs: recommend_module.pd.DataFrame(),
     )
 

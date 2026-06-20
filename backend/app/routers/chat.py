@@ -5,10 +5,10 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.agent.llm import chat_turn, explain_recommendations
-from app.clustering.onboarding_map import build_user_vector, intent_to_onboarding_answers
-from app.clustering.recommend import nearest_cluster, recommend_from_cluster
+from app.clustering.onboarding_map import intent_to_onboarding_answers
 from app.engine.anomaly import is_anomalous
 from app.engine.hybrid import apply_filters, recommend as hybrid_recommend
+from app.engine.preference import rank_by_preferences
 from app.i18n import t
 
 router = APIRouter()
@@ -91,16 +91,16 @@ def _seed_based_picks(state, seed_title, lang, exclude_titles, top_n=3, filters=
     return df
 
 
-def _cluster_based_picks(state, intent, exclude_titles, top_n=3):
+def _preference_picks(state, intent, exclude_titles, top_n=3):
+    """Seedless personalization: rank the whole catalog by the user's intent
+    (mood, length, era, popularity), the same weighted ranker used by onboarding."""
     answers = intent_to_onboarding_answers(intent)
-    vector, mask = build_user_vector(answers)
-    cluster_id = nearest_cluster(
-        vector, mask, state["cluster_centroids"], state["cluster_profiles"]
-    )
-    catalog = apply_filters(state["catalog_with_features"], intent)
-    return recommend_from_cluster(
-        catalog, cluster_id, vector, mask,
-        top_n=top_n, exclude_titles=list(exclude_titles),
+    return rank_by_preferences(
+        state["catalog_with_features"],
+        answers,
+        top_n=top_n,
+        exclude_titles=exclude_titles,
+        exclude_genres=intent.get("exclude_genres") or None,
     )
 
 
@@ -136,7 +136,7 @@ def _picks_for_intent(state, intent, lang, exclude_titles, top_n=3, prev_recs=No
         picks = _seed_based_picks(state, seeds[0], lang, exclude_titles, top_n, filters=intent)
         if not picks.empty:
             return picks
-    return _cluster_based_picks(state, intent, exclude_titles, top_n)
+    return _preference_picks(state, intent, exclude_titles, top_n)
 
 
 @router.post("/api/chat", response_model=ChatResponse)
