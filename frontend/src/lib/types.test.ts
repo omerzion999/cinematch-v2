@@ -21,7 +21,6 @@ describe("shared types", () => {
       genre: "drama",
       length: "medium",
       era: "recent",
-      tone: "serious_drama",
       popularity: "any",
     };
 

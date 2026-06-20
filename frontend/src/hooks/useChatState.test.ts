@@ -88,7 +88,6 @@ describe("useChatState", () => {
         genre: "any",
         length: "any",
         era: "any",
-        tone: "any",
         popularity: "any",
       },
       lang: "he",

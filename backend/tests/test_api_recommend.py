@@ -6,7 +6,6 @@ def test_recommend_returns_three_picks_with_intro_and_outro(client):
                 "genre": "drama",
                 "length": "long",
                 "era": "recent",
-                "tone": "serious_drama",
                 "popularity": "well_known",
             },
             "lang": "en",

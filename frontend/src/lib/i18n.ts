@@ -22,6 +22,8 @@ export const UI_STRINGS: Record<Lang, Record<string, string>> = {
     detailsLoading: "טוען פרטים נוספים...",
     genericError: "מצטערים, קרתה תקלה. נסה שוב מאוחר יותר.",
     newConversation: "שיחה חדשה",
+    questionProgress: "שאלה {step} מתוך {total}",
+    onboardingTypeHint: "אפשר לבחור למעלה, או לכתוב משהו כמו \"קומדיה\".",
   },
   en: {
     openingMessage:
@@ -44,6 +46,8 @@ export const UI_STRINGS: Record<Lang, Record<string, string>> = {
     detailsLoading: "Loading more details...",
     genericError: "Sorry, something went wrong. Please try again later.",
     newConversation: "New conversation",
+    questionProgress: "Question {step} of {total}",
+    onboardingTypeHint: "Pick one above, or type something like \"comedy\".",
   },
 };
 

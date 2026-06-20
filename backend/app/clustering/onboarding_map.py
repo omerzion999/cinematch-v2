@@ -42,6 +42,7 @@ LENGTH_Z_MAP = {
 
 ERA_Z_MAP = {
     "recent": 0.8,
+    "modern": 0.1,
     "classic": -1.2,
 }
 
@@ -70,6 +71,7 @@ LENGTH_PREF_MAP = {
 ERA_PREF_MAP = {
     "recent": "recent",
     "2020s": "recent",
+    "2010s": "modern",
     "classic": "classic",
     "1990s": "classic",
     "2000s": "classic",

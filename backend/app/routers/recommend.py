@@ -19,11 +19,10 @@ router = APIRouter()
 class OnboardingAnswers(BaseModel):
     genre: Literal[
         "drama", "comedy", "action_adventure", "scifi_fantasy",
-        "crime", "animation", "romance", "any",
+        "crime", "animation", "any",
     ] = "any"
     length: Literal["short", "medium", "long", "any"] = "any"
-    era: Literal["recent", "classic", "any"] = "any"
-    tone: Literal["light_fun", "serious_drama", "thriller_action", "any"] = "any"
+    era: Literal["recent", "modern", "classic", "any"] = "any"
     popularity: Literal["well_known", "hidden_gem", "any"] = "any"
 
 

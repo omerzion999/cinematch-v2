@@ -1,14 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { ONBOARDING_QUESTIONS } from "./onboarding";
+import { ONBOARDING_QUESTIONS, resolveTypedAnswer } from "./onboarding";
 import type { OnboardingAnswers } from "./types";
 
 describe("ONBOARDING_QUESTIONS", () => {
-  it("has exactly 5 questions, in the order genre, length, era, tone, popularity", () => {
+  it("has exactly 4 questions, in the order genre, length, era, popularity", () => {
     expect(ONBOARDING_QUESTIONS.map((q) => q.id)).toEqual([
       "genre",
       "length",
       "era",
-      "tone",
       "popularity",
     ]);
   });
@@ -29,16 +28,14 @@ describe("ONBOARDING_QUESTIONS", () => {
       genre: [
         "drama",
         "comedy",
-        "action_adventure",
-        "scifi_fantasy",
         "crime",
+        "scifi_fantasy",
+        "action_adventure",
         "animation",
-        "romance",
         "any",
       ],
       length: ["short", "medium", "long", "any"],
-      era: ["recent", "classic", "any"],
-      tone: ["light_fun", "serious_drama", "thriller_action", "any"],
+      era: ["recent", "modern", "classic", "any"],
       popularity: ["well_known", "hidden_gem", "any"],
     };
 
@@ -54,5 +51,36 @@ describe("ONBOARDING_QUESTIONS", () => {
         expect(option.label.en.length).toBeGreaterThan(0);
       }
     }
+  });
+});
+
+describe("resolveTypedAnswer", () => {
+  const genreQ = ONBOARDING_QUESTIONS.find((q) => q.id === "genre")!;
+  const lengthQ = ONBOARDING_QUESTIONS.find((q) => q.id === "length")!;
+  const eraQ = ONBOARDING_QUESTIONS.find((q) => q.id === "era")!;
+  const popularityQ = ONBOARDING_QUESTIONS.find((q) => q.id === "popularity")!;
+
+  it("matches an exact option value", () => {
+    expect(resolveTypedAnswer(genreQ, "comedy", "en")).toBe("comedy");
+  });
+
+  it("matches an English label case-insensitively", () => {
+    expect(resolveTypedAnswer(genreQ, "Sci-Fi & Fantasy", "en")).toBe("scifi_fantasy");
+  });
+
+  it("matches a Hebrew synonym", () => {
+    expect(resolveTypedAnswer(genreQ, "מצחיק", "he")).toBe("comedy");
+  });
+
+  it("maps English free text to length, era, and popularity", () => {
+    expect(resolveTypedAnswer(lengthQ, "something short", "en")).toBe("short");
+    expect(resolveTypedAnswer(eraQ, "the newest shows", "en")).toBe("recent");
+    expect(resolveTypedAnswer(eraQ, "modern stuff", "en")).toBe("modern");
+    expect(resolveTypedAnswer(popularityQ, "a hidden gem please", "en")).toBe("hidden_gem");
+  });
+
+  it("returns null when nothing matches", () => {
+    expect(resolveTypedAnswer(genreQ, "qwerty zzz", "en")).toBeNull();
+    expect(resolveTypedAnswer(genreQ, "", "en")).toBeNull();
   });
 });
