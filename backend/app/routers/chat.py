@@ -1,15 +1,19 @@
 """POST /api/chat - conversational turn handler (chat_turn + recommendations)."""
 
+import re
+
 import pandas as pd
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.agent.llm import chat_turn, explain_recommendations
-from app.clustering.onboarding_map import build_user_vector, intent_to_onboarding_answers
-from app.clustering.recommend import nearest_cluster, recommend_from_cluster
+from app.catalog_lookup import find_catalog_index
+from app.clustering.onboarding_map import intent_to_onboarding_answers
 from app.engine.anomaly import is_anomalous
 from app.engine.hybrid import apply_filters, recommend as hybrid_recommend
+from app.engine.preference import rank_by_preferences
 from app.i18n import t
+from app.poster import resolve_poster_path
 
 router = APIRouter()
 
@@ -52,7 +56,9 @@ def _to_rec_cards(df: pd.DataFrame) -> list[RecCard]:
             genres=row["genres"],
             rating=0.0 if pd.isna(row["rating"]) else float(row["rating"]),
             overview=row["overview"],
-            poster_path=_nan_to_none(row.get("poster_path")),
+            # Resolve via TMDB when the catalog has no poster, so chat cards show
+            # artwork too (the catalog poster_path is missing for about 25%).
+            poster_path=resolve_poster_path(row.to_dict()),
             decade_str=row["decade_str"],
             num_seasons=_nan_to_none(row.get("num_seasons")),
         )
@@ -60,16 +66,9 @@ def _to_rec_cards(df: pd.DataFrame) -> list[RecCard]:
     ]
 
 
-def _find_catalog_index(catalog: pd.DataFrame, title: str) -> int | None:
-    matches = catalog.index[catalog["title"].str.lower() == title.lower()]
-    if len(matches) == 0:
-        return None
-    return int(matches[0])
-
-
 def _seed_based_picks(state, seed_title, lang, exclude_titles, top_n=3, filters=None):
     catalog = state["catalog"]
-    idx = _find_catalog_index(catalog, seed_title)
+    idx = find_catalog_index(catalog, seed_title)
     if idx is None:
         return pd.DataFrame()
 
@@ -91,16 +90,35 @@ def _seed_based_picks(state, seed_title, lang, exclude_titles, top_n=3, filters=
     return df
 
 
-def _cluster_based_picks(state, intent, exclude_titles, top_n=3):
+_ANY_ANSWERS = {"genre": "any", "length": "any", "era": "any", "popularity": "any"}
+
+
+def _keyword_picks(state, keywords, exclude_titles, top_n=3):
+    """Bridge search: catalog shows whose title/overview mention the topic
+    keywords, ranked by the same quality blend as the preference ranker."""
+    catalog = state["catalog_with_features"]
+    # Word-boundary match so topic keywords do not hit substrings of unrelated
+    # words ("world" inside "Westworld", "rock" inside "Rocket").
+    pattern = "|".join(rf"\b{re.escape(k)}\b" for k in keywords if k)
+    if not pattern:
+        return catalog.head(0)
+    text = catalog["overview"].fillna("") + " " + catalog["title"].fillna("")
+    pool = catalog[text.str.contains(pattern, case=False, na=False, regex=True)]
+    if pool.empty:
+        return pool
+    return rank_by_preferences(pool, _ANY_ANSWERS, top_n=top_n, exclude_titles=exclude_titles)
+
+
+def _preference_picks(state, intent, exclude_titles, top_n=3):
+    """Seedless personalization: rank the whole catalog by the user's intent
+    (mood, length, era, popularity), the same weighted ranker used by onboarding."""
     answers = intent_to_onboarding_answers(intent)
-    vector, mask = build_user_vector(answers)
-    cluster_id = nearest_cluster(
-        vector, mask, state["cluster_centroids"], state["cluster_profiles"]
-    )
-    catalog = apply_filters(state["catalog_with_features"], intent)
-    return recommend_from_cluster(
-        catalog, cluster_id, vector, mask,
-        top_n=top_n, exclude_titles=list(exclude_titles),
+    return rank_by_preferences(
+        state["catalog_with_features"],
+        answers,
+        top_n=top_n,
+        exclude_titles=exclude_titles,
+        exclude_genres=intent.get("exclude_genres") or None,
     )
 
 
@@ -127,6 +145,12 @@ def _picks_for_intent(state, intent, lang, exclude_titles, top_n=3, prev_recs=No
     if mood_genres and not intent.get("include_genres"):
         intent = {**intent, "include_genres": mood_genres}
 
+    keywords = intent.get("keywords") or []
+    if keywords:
+        picks = _keyword_picks(state, keywords, exclude_titles, top_n)
+        if not picks.empty:
+            return picks
+
     if intent.get("language_pref") == "he":
         return _language_filtered_picks(state, "he", exclude_titles, top_n, intent)
     seeds = intent.get("seeds") or []
@@ -136,7 +160,7 @@ def _picks_for_intent(state, intent, lang, exclude_titles, top_n=3, prev_recs=No
         picks = _seed_based_picks(state, seeds[0], lang, exclude_titles, top_n, filters=intent)
         if not picks.empty:
             return picks
-    return _cluster_based_picks(state, intent, exclude_titles, top_n)
+    return _preference_picks(state, intent, exclude_titles, top_n)
 
 
 @router.post("/api/chat", response_model=ChatResponse)

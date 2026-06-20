@@ -44,6 +44,14 @@ def test_build_user_vector_length_and_era():
     assert mask.sum() == 2
 
 
+def test_build_user_vector_modern_era_sets_start_year_dim():
+    answers = {"genre": "any", "length": "any", "era": "modern", "popularity": "any"}
+    vector, mask = build_user_vector(answers)
+    assert vector[_idx("start_year_z")] == 0.1
+    assert mask[_idx("start_year_z")]
+    assert mask.sum() == 1
+
+
 def test_build_user_vector_hidden_gem_sets_two_dims():
     answers = {"genre": "any", "length": "any", "era": "any", "tone": "any", "popularity": "hidden_gem"}
     vector, mask = build_user_vector(answers)

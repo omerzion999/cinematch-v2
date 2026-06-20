@@ -1,10 +1,9 @@
 export type Lang = "he" | "en";
 
 export interface OnboardingAnswers {
-  genre: "drama" | "comedy" | "action_adventure" | "scifi_fantasy" | "crime" | "animation" | "romance" | "any";
+  genre: "drama" | "comedy" | "action_adventure" | "scifi_fantasy" | "crime" | "animation" | "any";
   length: "short" | "medium" | "long" | "any";
-  era: "recent" | "classic" | "any";
-  tone: "light_fun" | "serious_drama" | "thriller_action" | "any";
+  era: "recent" | "modern" | "classic" | "any";
   popularity: "well_known" | "hidden_gem" | "any";
 }
 
@@ -81,6 +80,7 @@ export interface ShowDetails {
   popularity: number | null;
   binge_fit_score: number;
   trailer_url: string | null;
+  trailer_key: string | null;
   cast: string[];
   watch_providers: string[];
 }

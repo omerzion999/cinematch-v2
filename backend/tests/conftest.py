@@ -30,3 +30,17 @@ def embeddings():
 def numeric_matrix(catalog):
     from app.engine.cosine import build_numeric_matrix
     return build_numeric_matrix(catalog)
+
+
+@pytest.fixture(scope="session")
+def catalog_with_features(catalog):
+    """Catalog joined with cluster_id + FEATURE_DIMS columns, as app/state.py builds it."""
+    import json
+
+    cluster_labels = pd.read_parquet(os.path.join(DATA_DIR, "cluster_labels.parquet"))
+    with open(os.path.join(DATA_DIR, "cluster_centroids.json"), encoding="utf-8") as f:
+        feature_dims = json.load(f)["feature_dims"]
+    overlap = [c for c in feature_dims if c in catalog.columns]
+    return catalog.drop(columns=overlap).merge(
+        cluster_labels[["title", "cluster_id"] + feature_dims], on="title", how="inner"
+    )

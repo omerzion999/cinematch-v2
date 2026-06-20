@@ -24,6 +24,8 @@ export interface ChoiceMessage {
   options: ChoiceOption[];
   selectedValue?: string;
   selectedLabel?: string;
+  /** 1-based step + total for onboarding questions ("Question 2 of 4"). */
+  progress?: { step: number; total: number };
 }
 
 export interface RecommendationsMessage {
@@ -67,7 +69,6 @@ const DEFAULT_ONBOARDING_ANSWERS: OnboardingAnswers = {
   genre: "any",
   length: "any",
   era: "any",
-  tone: "any",
   popularity: "any",
 };
 
@@ -96,7 +97,8 @@ export function createInitialState(lang: Lang): ChatState {
 
 function buildQuestionMessage(
   question: OnboardingQuestion<keyof OnboardingAnswers>,
-  lang: Lang
+  lang: Lang,
+  stepIndex: number
 ): ChoiceMessage {
   return {
     id: crypto.randomUUID(),
@@ -104,6 +106,7 @@ function buildQuestionMessage(
     role: "assistant",
     prompt: question.prompt[lang],
     options: question.options.map((o) => ({ value: o.value, label: o.label[lang] })),
+    progress: { step: stepIndex + 1, total: ONBOARDING_QUESTIONS.length },
   };
 }
 
@@ -195,7 +198,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         onboardingStepIndex: 0,
         messages: [
           ...closeLastChoice(state.messages, "start", strings.startOnboarding),
-          buildQuestionMessage(firstQuestion, state.lang),
+          buildQuestionMessage(firstQuestion, state.lang, 0),
         ],
       };
     }
@@ -230,7 +233,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           ...state,
           onboardingAnswers: updatedAnswers,
           onboardingStepIndex: nextIndex,
-          messages: [...messages, buildQuestionMessage(ONBOARDING_QUESTIONS[nextIndex], state.lang)],
+          messages: [...messages, buildQuestionMessage(ONBOARDING_QUESTIONS[nextIndex], state.lang, nextIndex)],
         };
       }
       return {

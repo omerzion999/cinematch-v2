@@ -6,7 +6,6 @@ def test_full_onboarding_to_chat_flow(client):
                 "genre": "drama",
                 "length": "long",
                 "era": "recent",
-                "tone": "serious_drama",
                 "popularity": "well_known",
             },
             "lang": "en",

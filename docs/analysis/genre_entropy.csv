@@ -1,0 +1,7 @@
+scope,distinct_genres,shannon_entropy_bits
+all,33,3.75
+1980s,25,3.669
+1990s,30,3.706
+2000s,33,3.738
+2010s,33,3.679
+2020s,33,3.692

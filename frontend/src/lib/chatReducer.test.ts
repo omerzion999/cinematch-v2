@@ -74,10 +74,10 @@ describe("chatReducer", () => {
     expect(greeting.content.length).toBeGreaterThan(0);
   });
 
-  it("walks through all 5 onboarding questions and ends in loading_recommend with all answers recorded", () => {
+  it("walks through all 4 onboarding questions and ends in loading_recommend with all answers recorded", () => {
     let state = chatReducer(createInitialState("he"), { type: "START_ONBOARDING" });
 
-    const answeredValues = ["drama", "medium", "recent", "serious_drama", "hidden_gem"];
+    const answeredValues = ["drama", "medium", "recent", "hidden_gem"];
     for (let i = 0; i < ONBOARDING_QUESTIONS.length; i++) {
       const question = ONBOARDING_QUESTIONS[i];
       state = chatReducer(state, {
@@ -92,15 +92,14 @@ describe("chatReducer", () => {
       genre: "drama",
       length: "medium",
       era: "recent",
-      tone: "serious_drama",
       popularity: "hidden_gem",
     });
 
-    // opening message + 5 questions, all closed (answered)
+    // opening message + 4 questions, all closed (answered)
     const choiceMessages = state.messages.filter(
       (m): m is ChoiceMessage => m.type === "choice"
     );
-    expect(choiceMessages).toHaveLength(6);
+    expect(choiceMessages).toHaveLength(5);
     for (const message of choiceMessages) {
       expect(message.selectedValue).toBeTruthy();
     }

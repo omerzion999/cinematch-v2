@@ -1,4 +1,4 @@
-import type { OnboardingAnswers } from "./types";
+import type { Lang, OnboardingAnswers } from "./types";
 
 export interface OnboardingOption<K extends keyof OnboardingAnswers = keyof OnboardingAnswers> {
   value: OnboardingAnswers[K];
@@ -21,37 +21,36 @@ export const ONBOARDING_QUESTIONS: { [K in keyof OnboardingAnswers]: OnboardingQ
     options: [
       { value: "drama", label: { he: "דרמה", en: "Drama" } },
       { value: "comedy", label: { he: "קומדיה", en: "Comedy" } },
-      {
-        value: "action_adventure",
-        label: { he: "אקשן והרפתקאות", en: "Action & Adventure" },
-      },
+      { value: "crime", label: { he: "פשע", en: "Crime" } },
       {
         value: "scifi_fantasy",
         label: { he: "מד\"ב ופנטזיה", en: "Sci-Fi & Fantasy" },
       },
-      { value: "crime", label: { he: "פשע", en: "Crime" } },
+      {
+        value: "action_adventure",
+        label: { he: "אקשן והרפתקאות", en: "Action & Adventure" },
+      },
       { value: "animation", label: { he: "אנימציה", en: "Animation" } },
-      { value: "romance", label: { he: "רומנטיקה", en: "Romance" } },
-      { value: "any", label: { he: "לא משנה", en: "Doesn't matter" } },
+      { value: "any", label: { he: "הפתע אותי", en: "Surprise me" } },
     ],
   },
   {
     id: "length",
     prompt: {
-      he: "כמה עונות אתה מעדיף?",
-      en: "How many seasons do you prefer?",
+      he: "כמה עונות בא לך?",
+      en: "How long do you want it?",
     },
     options: [
       {
         value: "short",
-        label: { he: "קצר / מיני (1-2 עונות)", en: "Short / mini-series (1-2 seasons)" },
+        label: { he: "קצר (1-2 עונות)", en: "Quick (1-2 seasons)" },
       },
       {
         value: "medium",
         label: { he: "בינוני (3-5 עונות)", en: "Medium (3-5 seasons)" },
       },
       { value: "long", label: { he: "ארוך (6+ עונות)", en: "Long (6+ seasons)" } },
-      { value: "any", label: { he: "לא משנה", en: "Doesn't matter" } },
+      { value: "any", label: { he: "לא משנה", en: "Any" } },
     ],
   },
   {
@@ -61,46 +60,96 @@ export const ONBOARDING_QUESTIONS: { [K in keyof OnboardingAnswers]: OnboardingQ
       en: "Which era interests you?",
     },
     options: [
-      { value: "recent", label: { he: "חדש (2020 ואילך)", en: "Recent (2020+)" } },
-      { value: "classic", label: { he: "קלאסי", en: "Classic" } },
-      { value: "any", label: { he: "לא משנה", en: "Doesn't matter" } },
-    ],
-  },
-  {
-    id: "tone",
-    prompt: {
-      he: "איזה טון אתה מחפש?",
-      en: "What tone are you in the mood for?",
-    },
-    options: [
-      { value: "light_fun", label: { he: "קליל ומשעשע", en: "Light & fun" } },
-      {
-        value: "serious_drama",
-        label: { he: "רציני ודרמטי", en: "Serious & dramatic" },
-      },
-      {
-        value: "thriller_action",
-        label: { he: "מותח ואקשן", en: "Thriller & action" },
-      },
-      { value: "any", label: { he: "לא משנה", en: "Doesn't matter" } },
+      { value: "recent", label: { he: "חדש (2020 ואילך)", en: "New (2020+)" } },
+      { value: "modern", label: { he: "מודרני (שנות ה-2010)", en: "Modern (2010s)" } },
+      { value: "classic", label: { he: "קלאסי (לפני 2010)", en: "Classic (pre-2010)" } },
+      { value: "any", label: { he: "לא משנה", en: "Any" } },
     ],
   },
   {
     id: "popularity",
     prompt: {
-      he: "מה אתה מעדיף?",
+      he: "מה בא לך?",
       en: "What do you prefer?",
     },
     options: [
       {
         value: "well_known",
-        label: { he: "להיטים מוכרים", en: "Well-known hits" },
+        label: { he: "להיטים גדולים", en: "Big hits" },
       },
       {
         value: "hidden_gem",
         label: { he: "פנינים נסתרות", en: "Hidden gems" },
       },
-      { value: "any", label: { he: "לא משנה", en: "Doesn't matter" } },
+      { value: "any", label: { he: "לא משנה", en: "Any" } },
     ],
   },
 ];
+
+/**
+ * Free-text synonyms per option value, both languages, so a typed answer can be
+ * mapped to a tap option. Keys are option values; entries are lowercase tokens
+ * matched as substrings against the normalized user text.
+ */
+const TYPED_SYNONYMS: Record<string, string[]> = {
+  // genre
+  drama: ["drama", "דרמה", "דרמטי"],
+  comedy: ["comedy", "comed", "funny", "sitcom", "קומדיה", "מצחיק", "הומור", "קומי"],
+  crime: ["crime", "detective", "mafia", "פשע", "פשיעה", "בלש", "מאפיה", "פושע"],
+  scifi_fantasy: [
+    "sci-fi", "scifi", "sci fi", "science fiction", "fantasy", "מד\"ב", "מדב",
+    "מדע בדיוני", "פנטזיה", "פנטסיה",
+  ],
+  action_adventure: [
+    "action", "adventure", "אקשן", "פעולה", "הרפתקה", "הרפתקאות",
+  ],
+  animation: ["animation", "animated", "cartoon", "anime", "אנימציה", "מצויר", "אנימה"],
+  // length
+  short: ["short", "quick", "mini", "1", "2", "one season", "two season", "קצר", "מיני", "עונה אחת"],
+  medium: ["medium", "mid", "3", "4", "5", "בינוני", "אמצע"],
+  long: ["long", "epic", "6", "many seasons", "ארוך", "הרבה עונות"],
+  // era
+  recent: ["recent", "new", "newest", "latest", "2020", "2021", "2022", "2023", "2024", "חדש", "עכשווי", "אחרון"],
+  modern: ["modern", "2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018", "2019", "מודרני", "עשור"],
+  classic: ["classic", "old", "older", "retro", "vintage", "90", "2000", "קלאסי", "ישן", "פעם", "וינטג"],
+  // popularity
+  well_known: ["popular", "big hit", "hits", "famous", "well known", "well-known", "mainstream", "להיט", "להיטים", "מפורסם", "פופולרי", "מוכר"],
+  hidden_gem: ["hidden", "gem", "gems", "underrated", "obscure", "niche", "unknown", "פנינה", "פנינים", "נסתר", "לא מוכר", "אנדרגראונד"],
+  // shared catch-all
+  any: ["any", "anything", "whatever", "surprise", "surprise me", "doesn't matter", "dont care", "לא משנה", "הכל", "הפתע", "מה שבא"],
+};
+
+/**
+ * Maps a free-text answer to one of `question`'s option values, or null if no
+ * confident match. Tries exact value/label match first, then synonym tokens.
+ */
+export function resolveTypedAnswer(
+  question: OnboardingQuestion,
+  text: string,
+  lang: Lang
+): OnboardingAnswers[keyof OnboardingAnswers] | null {
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) return null;
+
+  // Exact value or label match (either language).
+  for (const option of question.options) {
+    if (
+      normalized === String(option.value) ||
+      normalized === option.label[lang].toLowerCase() ||
+      normalized === option.label.he.toLowerCase() ||
+      normalized === option.label.en.toLowerCase()
+    ) {
+      return option.value;
+    }
+  }
+
+  // Synonym token match, restricted to this question's option values.
+  for (const option of question.options) {
+    const tokens = TYPED_SYNONYMS[String(option.value)] ?? [];
+    if (tokens.some((token) => normalized.includes(token))) {
+      return option.value;
+    }
+  }
+
+  return null;
+}

@@ -7,7 +7,7 @@ import { useChatState } from "@/hooks/useChatState";
 import { postTranslate } from "@/lib/api";
 import { findStaticTranslation, type TextMessage } from "@/lib/chatReducer";
 import { UI_STRINGS } from "@/lib/i18n";
-import { ONBOARDING_QUESTIONS } from "@/lib/onboarding";
+import { ONBOARDING_QUESTIONS, resolveTypedAnswer } from "@/lib/onboarding";
 import type { RecCard as RecCardData } from "@/lib/types";
 import { MessageBubble } from "./MessageBubble";
 import { OnboardingQuestion } from "./OnboardingQuestion";
@@ -19,6 +19,7 @@ export function ChatWindow() {
   const strings = UI_STRINGS[state.lang];
   const [inputValue, setInputValue] = useState("");
   const [selectedShow, setSelectedShow] = useState<RecCardData | null>(null);
+  const [onboardingHint, setOnboardingHint] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -26,7 +27,8 @@ export function ChatWindow() {
   }, [state.messages]);
 
   const isLoading = state.phase === "loading_recommend" || state.phase === "loading_chat";
-  const canSendMessage = state.phase === "chat";
+  // Allow typing during onboarding (typed-or-tapped) as well as in free chat.
+  const canSendMessage = state.phase === "chat" || state.phase === "onboarding";
   const dir = state.lang === "he" ? "rtl" : "ltr";
 
   function handleChoiceSelect(value: string) {
@@ -40,6 +42,7 @@ export function ChatWindow() {
     }
     if (state.phase === "onboarding") {
       const question = ONBOARDING_QUESTIONS[state.onboardingStepIndex];
+      setOnboardingHint(null);
       dispatch({ type: "ANSWER_ONBOARDING_QUESTION", questionId: question.id, value });
     }
   }
@@ -59,6 +62,23 @@ export function ChatWindow() {
   function handleSend() {
     const trimmed = inputValue.trim();
     if (!trimmed) return;
+
+    // During onboarding, map the typed text to an option instead of starting a
+    // free-chat turn. If it does not map to anything, keep the question open and
+    // show a short hint.
+    if (state.phase === "onboarding") {
+      const question = ONBOARDING_QUESTIONS[state.onboardingStepIndex];
+      const value = resolveTypedAnswer(question, trimmed, state.lang);
+      if (value) {
+        setInputValue("");
+        setOnboardingHint(null);
+        dispatch({ type: "ANSWER_ONBOARDING_QUESTION", questionId: question.id, value });
+      } else {
+        setOnboardingHint(strings.onboardingTypeHint);
+      }
+      return;
+    }
+
     dispatch({ type: "SEND_USER_MESSAGE", content: trimmed });
     setInputValue("");
   }
@@ -175,6 +195,10 @@ export function ChatWindow() {
             <div ref={bottomRef} />
           </div>
         </ScrollArea>
+
+        {onboardingHint && state.phase === "onboarding" && (
+          <p className="px-3 pt-2 text-xs text-muted-foreground">{onboardingHint}</p>
+        )}
 
         <form
           className="flex items-center gap-2 border-t border-primary/15 p-3"

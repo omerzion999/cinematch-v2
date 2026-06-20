@@ -367,10 +367,9 @@ def explain_recommendations(intent: dict, recommendations: list[dict], lang: str
     if not recommendations:
         return "לא נמצאו תוצאות מתאימות." if lang == "he" else "No matching results found."
 
-    # Hebrew LLM quality is inadequate for explanations — use deterministic template
-    if lang == "he":
-        return _fallback_explanation(intent, recommendations, lang)
-
+    # Both languages go through the LLM (the explainer system prompt enforces
+    # natural casual Hebrew). The deterministic template stays as the fallback
+    # for when the LLM is unavailable or returns nothing.
     if not _get_client():
         return _fallback_explanation(intent, recommendations, lang)
 
@@ -448,6 +447,82 @@ def _is_gibberish(msg: str) -> bool:
     if not re.fullmatch(r"[A-Za-z]+", text):
         return False
     return not any(c in _VOWELS for c in text)
+
+
+# ── Off-topic bridge map ──────────────────────────────────────────────────────
+# Maps a real-world topic the user might mention (in Hebrew or English) to TV
+# catalog search keywords. When a user asks for something off-topic but
+# bridgeable ("I want to make pasta"), we search the catalog for shows ABOUT that
+# topic (matched on title/overview) instead of hard-declining. Keywords are
+# matched against the English overview/title, so they are English stems.
+# Each entry: trigger_tokens -> (topic_label, search_keywords).
+#
+# Search keywords are curated to be topic-specific (matched on word boundaries
+# against the English overview/title), so generic words that cross topics
+# ("world", "team", "band", "rock") are deliberately excluded.
+_BRIDGE_MAP: list[tuple[list[str], tuple[str, list[str]]]] = [
+    (["cook", "cooking", "recipe", "pasta", "bake", "baking", "chef", "kitchen",
+      "food", "מבשל", "לבשל", "בישול", "מתכון", "אוכל", "אפיה", "מאפה"],
+     ("cooking", ["chef", "cook", "cooking", "kitchen", "culinary", "recipe",
+                  "restaurant", "cuisine", "baking"])),
+    (["sport", "sports", "football", "soccer", "basketball", "workout", "gym",
+      "ספורט", "כדורגל", "כדורסל", "אימון", "כושר"],
+     ("sports", ["football", "soccer", "basketball", "baseball", "athlete",
+                 "olympic", "championship"])),
+    (["travel", "trip", "vacation", "flight", "tourism",
+      "טיול", "לטייל", "חופשה", "נסיעה", "תיירות"],
+     ("travel", ["travel", "traveler", "tourist", "expedition", "backpacking"])),
+    (["music", "song", "songs", "concert", "guitar", "band",
+      "מוזיקה", "מוסיקה", "שיר", "שירים", "הופעה", "גיטרה", "להקה"],
+     ("music", ["music", "musician", "singer", "songwriter", "rapper",
+                "orchestra", "jazz"])),
+    (["space", "science", "physics", "universe", "astronomy",
+      "חלל", "מדע", "פיזיקה", "יקום", "אסטרונומיה"],
+     ("science", ["space", "science", "scientist", "physics", "cosmos",
+                  "universe", "astronaut"])),
+    (["history", "historical", "war", "ancient",
+      "היסטוריה", "היסטורי", "מלחמה", "עתיק"],
+     ("history", ["history", "historical", "ancient", "empire", "medieval",
+                  "dynasty"])),
+    (["nature", "animal", "animals", "wildlife", "ocean",
+      "טבע", "חיות", "בעלי חיים", "אוקיינוס"],
+     ("nature", ["nature", "wildlife", "animal", "ocean", "jungle", "safari",
+                 "species"])),
+    (["car", "cars", "racing", "motor", "drive",
+      "מכונית", "מכוניות", "רכב", "מירוץ", "נהיגה"],
+     ("cars", ["racing", "motorsport", "automobile", "supercar"])),
+    (["fashion", "style", "model", "design",
+      "אופנה", "סטייל", "דוגמנית", "עיצוב"],
+     ("fashion", ["fashion", "runway", "couture", "designer", "modeling"])),
+]
+
+_BRIDGE_LABELS_HE = {
+    "cooking": "בישול", "sports": "ספורט", "travel": "טיולים", "music": "מוזיקה",
+    "science": "מדע", "history": "היסטוריה", "nature": "טבע", "cars": "רכב",
+    "fashion": "אופנה",
+}
+
+
+def _detect_bridge(msg: str) -> Optional[tuple[str, list[str]]]:
+    """If the message mentions a bridgeable real-world topic, return
+    (topic_label, search_keywords); otherwise None."""
+    m = msg.lower()
+    for tokens, payload in _BRIDGE_MAP:
+        for tok in tokens:
+            # word-ish boundary for short Latin tokens to avoid false hits
+            if tok.isascii() and tok.isalpha() and len(tok) <= 4:
+                if re.search(rf"\b{re.escape(tok)}\b", m):
+                    return payload
+            elif tok in m:
+                return payload
+    return None
+
+
+def _bridge_reply(topic: str, lang: str) -> str:
+    if lang == "he":
+        label = _BRIDGE_LABELS_HE.get(topic, topic)
+        return f"אני על סדרות, אבל הנה כמה סדרות בנושא {label} שתוכל לראות:"
+    return f"I'm all about TV, but here are some great {topic} series to watch:"
 
 
 # ── Additional keyword patterns ───────────────────────────────────────────────
@@ -851,7 +926,27 @@ def chat_turn(
         return {
             "action": "chat",
             "intent": base_intent,
-            "reply": t("not_in_catalog", detected_lang),
+            "reply": t("rephrase", detected_lang),
+            "follow_up": "",
+        }
+
+    # ── Off-topic bridge fast-path (no LLM) ───────────────────────────────────
+    # If the message is about a real-world topic we can bridge to TV (cooking,
+    # sports, travel, ...), search the catalog for shows about that topic instead
+    # of hard-declining. See _detect_bridge.
+    bridge = _detect_bridge(last_user)
+    if bridge:
+        topic, keywords = bridge
+        base_intent = {
+            "seeds": [], "mood": [], "length_pref": "any",
+            "exclude_genres": [], "lang": detected_lang,
+            "language_pref": "any", "free_text": last_user,
+            "keywords": keywords,
+        }
+        return {
+            "action": "search",
+            "intent": base_intent,
+            "reply": _bridge_reply(topic, detected_lang),
             "follow_up": "",
         }
 
@@ -970,20 +1065,17 @@ def chat_turn(
             pass
 
     # LLM call failed (Groq timeout, rate limit, or invalid JSON).
-    # If regex already captured mood or seeds, do a search immediately rather
-    # than surfacing a confusing "hiccup" message — the user will see real results.
-    # Only fall back to the error message when there is nothing to search on.
+    # Always fall back to a real search rather than a confusing "hiccup" message:
+    # if regex captured mood/seeds we use them, otherwise an empty intent which
+    # the weighted ranker turns into strong general-quality picks. The user sees
+    # real recommendations instead of an error.
     fallback["lang"] = detected_lang
     fallback["language_pref"] = "any"
-    if fallback.get("mood") or fallback.get("seeds"):
-        return {"action": "search", "intent": fallback, "reply": "", "follow_up": ""}
-
-    fallback_reply = (
-        "Hmm, my brain just hiccuped. What were you looking for?"
-        if detected_lang == "en"
-        else "אופס, רגע קטן. מה חיפשת?"
+    reply = "" if (fallback.get("mood") or fallback.get("seeds")) else (
+        "Here are a few you might enjoy:" if detected_lang == "en"
+        else "הנה כמה שאולי יתאימו לך:"
     )
-    return {"action": "chat", "intent": fallback, "reply": fallback_reply, "follow_up": ""}
+    return {"action": "search", "intent": fallback, "reply": reply, "follow_up": ""}
 
 
 def _fallback_explanation(intent: dict, recommendations: list[dict], lang: str) -> str:

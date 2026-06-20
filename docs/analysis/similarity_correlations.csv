@@ -1,0 +1,4 @@
+pair,spearman
+Jaccard vs Cosine-text,0.1834
+Jaccard vs Cosine-numeric,0.1103
+Cosine-text vs Cosine-numeric,0.015

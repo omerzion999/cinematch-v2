@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.agent.tmdb import get_tv_show_details, search_tv_show
+from app.catalog_lookup import find_catalog_index
 from app.i18n import t
 
 router = APIRouter()
@@ -26,6 +27,7 @@ class ShowDetails(BaseModel):
     popularity: float | None = None
     binge_fit_score: float
     trailer_url: str | None = None
+    trailer_key: str | None = None  # YouTube video id, for an embedded iframe
     cast: list[str] = []
     watch_providers: list[str] = []
 
@@ -34,18 +36,14 @@ def _nan_to_none(value):
     return None if pd.isna(value) else value
 
 
-def _find_catalog_index(catalog: pd.DataFrame, title: str) -> int | None:
-    matches = catalog.index[catalog["title"].str.lower() == title.lower()]
-    if len(matches) == 0:
-        return None
-    return int(matches[0])
-
-
-def _extract_trailer_url(details: dict) -> str | None:
-    for video in details.get("videos", {}).get("results", []):
-        if video.get("site") == "YouTube" and video.get("type") == "Trailer":
-            return f"https://www.youtube.com/watch?v={video['key']}"
-    return None
+def _extract_trailer_key(details: dict) -> str | None:
+    """YouTube video id of the first YouTube trailer, else any YouTube video."""
+    videos = details.get("videos", {}).get("results", [])
+    youtube = [v for v in videos if v.get("site") == "YouTube" and v.get("key")]
+    for video in youtube:
+        if video.get("type") == "Trailer":
+            return video["key"]
+    return youtube[0]["key"] if youtube else None
 
 
 def _extract_cast(details: dict, limit: int = 5) -> list[str]:
@@ -63,7 +61,7 @@ def get_show(title: str, request: Request, lang: str = "he") -> ShowDetails:
     state = request.app.state.cinematch
     catalog = state["catalog"]
 
-    idx = _find_catalog_index(catalog, title)
+    idx = find_catalog_index(catalog, title)
     if idx is None:
         raise HTTPException(status_code=404, detail=t("show_not_found", lang))
 
@@ -90,7 +88,9 @@ def get_show(title: str, request: Request, lang: str = "he") -> ShowDetails:
     if tmdb_result:
         tmdb_details = get_tv_show_details(tmdb_result["id"])
         if tmdb_details:
-            details.trailer_url = _extract_trailer_url(tmdb_details)
+            details.trailer_key = _extract_trailer_key(tmdb_details)
+            if details.trailer_key:
+                details.trailer_url = f"https://www.youtube.com/watch?v={details.trailer_key}"
             details.cast = _extract_cast(tmdb_details)
             details.watch_providers = _extract_watch_providers(tmdb_details)
 

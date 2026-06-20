@@ -43,6 +43,7 @@ const SAMPLE_SHOW_DETAILS: ShowDetails = {
   popularity: 95.3,
   binge_fit_score: 0.82,
   trailer_url: null,
+  trailer_key: null,
   cast: [],
   watch_providers: [],
 };
