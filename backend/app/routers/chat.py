@@ -1,10 +1,13 @@
 """POST /api/chat - conversational turn handler (chat_turn + recommendations)."""
 
+import re
+
 import pandas as pd
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.agent.llm import chat_turn, explain_recommendations
+from app.catalog_lookup import find_catalog_index
 from app.clustering.onboarding_map import intent_to_onboarding_answers
 from app.engine.anomaly import is_anomalous
 from app.engine.hybrid import apply_filters, recommend as hybrid_recommend
@@ -60,16 +63,9 @@ def _to_rec_cards(df: pd.DataFrame) -> list[RecCard]:
     ]
 
 
-def _find_catalog_index(catalog: pd.DataFrame, title: str) -> int | None:
-    matches = catalog.index[catalog["title"].str.lower() == title.lower()]
-    if len(matches) == 0:
-        return None
-    return int(matches[0])
-
-
 def _seed_based_picks(state, seed_title, lang, exclude_titles, top_n=3, filters=None):
     catalog = state["catalog"]
-    idx = _find_catalog_index(catalog, seed_title)
+    idx = find_catalog_index(catalog, seed_title)
     if idx is None:
         return pd.DataFrame()
 
@@ -89,6 +85,25 @@ def _seed_based_picks(state, seed_title, lang, exclude_titles, top_n=3, filters=
     if is_anomalous(float(df.iloc[0]["hybrid_score"]), state["anomaly_threshold"]):
         return pd.DataFrame()
     return df
+
+
+_ANY_ANSWERS = {"genre": "any", "length": "any", "era": "any", "popularity": "any"}
+
+
+def _keyword_picks(state, keywords, exclude_titles, top_n=3):
+    """Bridge search: catalog shows whose title/overview mention the topic
+    keywords, ranked by the same quality blend as the preference ranker."""
+    catalog = state["catalog_with_features"]
+    # Word-boundary match so topic keywords do not hit substrings of unrelated
+    # words ("world" inside "Westworld", "rock" inside "Rocket").
+    pattern = "|".join(rf"\b{re.escape(k)}\b" for k in keywords if k)
+    if not pattern:
+        return catalog.head(0)
+    text = catalog["overview"].fillna("") + " " + catalog["title"].fillna("")
+    pool = catalog[text.str.contains(pattern, case=False, na=False, regex=True)]
+    if pool.empty:
+        return pool
+    return rank_by_preferences(pool, _ANY_ANSWERS, top_n=top_n, exclude_titles=exclude_titles)
 
 
 def _preference_picks(state, intent, exclude_titles, top_n=3):
@@ -126,6 +141,12 @@ def _picks_for_intent(state, intent, lang, exclude_titles, top_n=3, prev_recs=No
     mood_genres = [_MOOD_TO_GENRE[m] for m in (intent.get("mood") or []) if m in _MOOD_TO_GENRE]
     if mood_genres and not intent.get("include_genres"):
         intent = {**intent, "include_genres": mood_genres}
+
+    keywords = intent.get("keywords") or []
+    if keywords:
+        picks = _keyword_picks(state, keywords, exclude_titles, top_n)
+        if not picks.empty:
+            return picks
 
     if intent.get("language_pref") == "he":
         return _language_filtered_picks(state, "he", exclude_titles, top_n, intent)

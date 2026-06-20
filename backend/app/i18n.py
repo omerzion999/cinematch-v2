@@ -27,6 +27,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "he": "זה לא מופיע במאגר הנתונים שלי, אולי תנסה לנסח את זה מחדש?",
         "en": "That doesn't seem to be in my catalog, maybe try rephrasing?",
     },
+    "rephrase": {
+        "he": "זה לא ממש ברור לי, מה בא לך לראות?",
+        "en": "I didn't quite catch that, what are you in the mood to watch?",
+    },
 }
 
 

@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.agent.tmdb import get_tv_show_details, search_tv_show
+from app.catalog_lookup import find_catalog_index
 from app.i18n import t
 
 router = APIRouter()
@@ -34,13 +35,6 @@ def _nan_to_none(value):
     return None if pd.isna(value) else value
 
 
-def _find_catalog_index(catalog: pd.DataFrame, title: str) -> int | None:
-    matches = catalog.index[catalog["title"].str.lower() == title.lower()]
-    if len(matches) == 0:
-        return None
-    return int(matches[0])
-
-
 def _extract_trailer_url(details: dict) -> str | None:
     for video in details.get("videos", {}).get("results", []):
         if video.get("site") == "YouTube" and video.get("type") == "Trailer":
@@ -63,7 +57,7 @@ def get_show(title: str, request: Request, lang: str = "he") -> ShowDetails:
     state = request.app.state.cinematch
     catalog = state["catalog"]
 
-    idx = _find_catalog_index(catalog, title)
+    idx = find_catalog_index(catalog, title)
     if idx is None:
         raise HTTPException(status_code=404, detail=t("show_not_found", lang))
 
