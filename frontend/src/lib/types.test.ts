@@ -100,6 +100,7 @@ describe("shared types", () => {
       popularity: 88.5,
       binge_fit_score: 0.91,
       trailer_url: "https://www.youtube.com/watch?v=xyz",
+      trailer_key: "xyz",
       cast: ["Adam Scott", "Britt Lower"],
       watch_providers: ["Apple TV+"],
     };

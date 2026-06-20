@@ -99,15 +99,30 @@ function ShowDetailsContent({ show, lang, onClose }: ShowDetailsContentProps) {
 
         {loading && <p className="text-muted-foreground">{strings.detailsLoading}</p>}
 
-        {details?.trailer_url && (
-          <a
-            href={details.trailer_url}
-            target="_blank"
-            rel="noreferrer"
-            className="text-primary underline"
-          >
-            {strings.trailerLabel}
-          </a>
+        {details?.trailer_key ? (
+          <div className="space-y-1">
+            <p className="font-semibold">{strings.trailerLabel}</p>
+            <div className="aspect-video w-full overflow-hidden rounded-md">
+              <iframe
+                className="h-full w-full"
+                src={`https://www.youtube.com/embed/${details.trailer_key}`}
+                title={`${show.title} trailer`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          </div>
+        ) : (
+          details?.trailer_url && (
+            <a
+              href={details.trailer_url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary underline"
+            >
+              {strings.trailerLabel}
+            </a>
+          )
         )}
 
         {details && details.cast.length > 0 && (

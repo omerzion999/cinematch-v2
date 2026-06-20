@@ -13,6 +13,7 @@ from app.engine.anomaly import is_anomalous
 from app.engine.hybrid import apply_filters, recommend as hybrid_recommend
 from app.engine.preference import rank_by_preferences
 from app.i18n import t
+from app.poster import resolve_poster_path
 
 router = APIRouter()
 
@@ -55,7 +56,9 @@ def _to_rec_cards(df: pd.DataFrame) -> list[RecCard]:
             genres=row["genres"],
             rating=0.0 if pd.isna(row["rating"]) else float(row["rating"]),
             overview=row["overview"],
-            poster_path=_nan_to_none(row.get("poster_path")),
+            # Resolve via TMDB when the catalog has no poster, so chat cards show
+            # artwork too (the catalog poster_path is missing for about 25%).
+            poster_path=resolve_poster_path(row.to_dict()),
             decade_str=row["decade_str"],
             num_seasons=_nan_to_none(row.get("num_seasons")),
         )

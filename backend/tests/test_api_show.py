@@ -46,6 +46,7 @@ def test_show_found_with_tmdb_populates_optional_fields(client, monkeypatch):
     response = client.get(f"/api/show/{title}")
     assert response.status_code == 200
     body = response.json()
+    assert body["trailer_key"] == "abc123"
     assert body["trailer_url"] == "https://www.youtube.com/watch?v=abc123"
     assert body["cast"] == ["Actor One", "Actor Two"]
     assert body["watch_providers"] == ["Netflix"]

@@ -35,6 +35,7 @@ const fullDetails: ShowDetails = {
   popularity: 95.3,
   binge_fit_score: 0.82,
   trailer_url: "https://www.youtube.com/watch?v=abc123",
+  trailer_key: "abc123",
   cast: ["Adam Scott", "Britt Lower"],
   watch_providers: ["Apple TV+"],
 };
@@ -42,6 +43,7 @@ const fullDetails: ShowDetails = {
 const detailsWithoutExtras: ShowDetails = {
   ...fullDetails,
   trailer_url: null,
+  trailer_key: null,
   cast: [],
   watch_providers: [],
 };
@@ -70,9 +72,9 @@ describe("ShowDetailsModal", () => {
       expect(screen.getByText("Adam Scott")).toBeInTheDocument();
     });
     expect(screen.getByText("Apple TV+")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "טריילר" })).toHaveAttribute(
-      "href",
-      "https://www.youtube.com/watch?v=abc123"
+    expect(screen.getByTitle("Severance trailer")).toHaveAttribute(
+      "src",
+      "https://www.youtube.com/embed/abc123"
     );
   });
 

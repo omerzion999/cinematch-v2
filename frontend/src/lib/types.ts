@@ -80,6 +80,7 @@ export interface ShowDetails {
   popularity: number | null;
   binge_fit_score: number;
   trailer_url: string | null;
+  trailer_key: string | null;
   cast: string[];
   watch_providers: string[];
 }
