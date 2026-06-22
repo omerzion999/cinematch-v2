@@ -70,6 +70,16 @@ def test_exclude_titles_are_dropped(catalog_with_features):
     assert excluded.isdisjoint(set(_titles(second)))
 
 
+def test_genre_is_a_floor_not_just_a_bonus(catalog_with_features):
+    # Every returned title must actually carry the chosen genre (floor), and the
+    # result count is dynamic (at most 3).
+    for g, label in [("crime", "Crime"), ("animation", "Animation"),
+                     ("scifi_fantasy", "Sci-Fi & Fantasy")]:
+        picks = rank_by_preferences(catalog_with_features, _ans(genre=g), top_n=3)
+        assert 1 <= len(picks) <= 3
+        assert all(label in genres for genres in picks["genres"])
+
+
 def test_combined_genre_and_era(catalog_with_features):
     picks = rank_by_preferences(
         catalog_with_features, _ans(genre="drama", era="recent"), top_n=3

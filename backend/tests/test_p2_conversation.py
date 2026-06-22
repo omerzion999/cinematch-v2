@@ -10,9 +10,10 @@ from app.catalog_lookup import find_catalog_index
 def test_bridge_detects_cooking():
     out = llm._detect_bridge("i want to make pasta")
     assert out is not None
-    topic, keywords = out
+    topic, keywords, preferred_genres = out
     assert topic == "cooking"
     assert "chef" in keywords
+    assert "Documentary" in preferred_genres
 
 
 def test_bridge_detects_hebrew_sports():
@@ -35,14 +36,25 @@ def test_chat_turn_bridges_offtopic_to_search(monkeypatch):
     assert result["reply"]  # a warm bridge one-liner
 
 
-def test_chat_endpoint_bridge_returns_cooking_shows(client):
+def test_chat_endpoint_bridge_returns_relevant_cooking_shows(client):
     resp = client.post("/api/chat", json={
         "conversation": [{"role": "user", "content": "how do I cook pasta"}],
         "prev_recs": None, "lang": "en",
     })
     assert resp.status_code == 200
     body = resp.json()
-    assert body["recommendations"]  # real catalog shows, not a hard decline
+    recs = body["recommendations"]
+    assert recs and 1 <= len(recs) <= 3            # dynamic 1-3, not a hard decline
+    assert body["explanation"] is None              # short answer, no long bubble
+
+    catalog_titles = set(client.app.state.cinematch["catalog"]["title"])
+    cooking_genres = ("Documentary", "Reality", "Family")
+    cooking_words = ("chef", "cook", "kitchen", "food", "bak", "cuisine", "culinary")
+    for r in recs:
+        assert r["title"] in catalog_titles        # catalog-first, never invented
+        on_topic = any(g in r["genres"] for g in cooking_genres) or \
+            any(w in r["title"].lower() for w in cooking_words)
+        assert on_topic, f"off-topic bridge pick: {r['title']} ({r['genres']})"
 
 
 # ── Fuzzy title lookup ────────────────────────────────────────────────────────

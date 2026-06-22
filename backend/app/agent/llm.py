@@ -455,45 +455,58 @@ def _is_gibberish(msg: str) -> bool:
 # bridgeable ("I want to make pasta"), we search the catalog for shows ABOUT that
 # topic (matched on title/overview) instead of hard-declining. Keywords are
 # matched against the English overview/title, so they are English stems.
-# Each entry: trigger_tokens -> (topic_label, search_keywords).
+# Each entry: trigger_tokens -> (topic_label, search_keywords, preferred_genres).
 #
 # Search keywords are curated to be topic-specific (matched on word boundaries
 # against the English overview/title), so generic words that cross topics
-# ("world", "team", "band", "rock") are deliberately excluded.
-_BRIDGE_MAP: list[tuple[list[str], tuple[str, list[str]]]] = [
+# ("world", "team", "band", "rock") are deliberately excluded. preferred_genres
+# is the relevance filter the chat router applies on top of the keyword match: a
+# candidate is kept only if its genre is one of these OR a keyword appears in its
+# title. That drops off-topic shows that merely mention a keyword in passing
+# (e.g. Daredevil's "Hell's Kitchen").
+_BRIDGE_MAP: list[tuple[list[str], tuple[str, list[str], list[str]]]] = [
     (["cook", "cooking", "recipe", "pasta", "bake", "baking", "chef", "kitchen",
       "food", "מבשל", "לבשל", "בישול", "מתכון", "אוכל", "אפיה", "מאפה"],
      ("cooking", ["chef", "cook", "cooking", "kitchen", "culinary", "recipe",
-                  "restaurant", "cuisine", "baking"])),
+                  "restaurant", "cuisine", "baking", "food"],
+      ["Documentary", "Reality", "Family"])),
     (["sport", "sports", "football", "soccer", "basketball", "workout", "gym",
       "ספורט", "כדורגל", "כדורסל", "אימון", "כושר"],
      ("sports", ["football", "soccer", "basketball", "baseball", "athlete",
-                 "olympic", "championship"])),
+                 "olympic", "championship"],
+      ["Documentary", "Reality", "Sport"])),
     (["travel", "trip", "vacation", "flight", "tourism",
       "טיול", "לטייל", "חופשה", "נסיעה", "תיירות"],
-     ("travel", ["travel", "traveler", "tourist", "expedition", "backpacking"])),
+     ("travel", ["travel", "traveler", "tourist", "expedition", "backpacking"],
+      ["Documentary", "Reality"])),
     (["music", "song", "songs", "concert", "guitar", "band",
       "מוזיקה", "מוסיקה", "שיר", "שירים", "הופעה", "גיטרה", "להקה"],
      ("music", ["music", "musician", "singer", "songwriter", "rapper",
-                "orchestra", "jazz"])),
+                "orchestra", "jazz"],
+      ["Music", "Documentary"])),
     (["space", "science", "physics", "universe", "astronomy",
       "חלל", "מדע", "פיזיקה", "יקום", "אסטרונומיה"],
      ("science", ["space", "science", "scientist", "physics", "cosmos",
-                  "universe", "astronaut"])),
+                  "universe", "astronaut"],
+      ["Documentary"])),
     (["history", "historical", "war", "ancient",
       "היסטוריה", "היסטורי", "מלחמה", "עתיק"],
      ("history", ["history", "historical", "ancient", "empire", "medieval",
-                  "dynasty"])),
+                  "dynasty"],
+      ["Documentary", "History", "War"])),
     (["nature", "animal", "animals", "wildlife", "ocean",
       "טבע", "חיות", "בעלי חיים", "אוקיינוס"],
      ("nature", ["nature", "wildlife", "animal", "ocean", "jungle", "safari",
-                 "species"])),
+                 "species"],
+      ["Documentary", "Family"])),
     (["car", "cars", "racing", "motor", "drive",
       "מכונית", "מכוניות", "רכב", "מירוץ", "נהיגה"],
-     ("cars", ["racing", "motorsport", "automobile", "supercar"])),
+     ("cars", ["racing", "motorsport", "automobile", "supercar"],
+      ["Documentary", "Reality"])),
     (["fashion", "style", "model", "design",
       "אופנה", "סטייל", "דוגמנית", "עיצוב"],
-     ("fashion", ["fashion", "runway", "couture", "designer", "modeling"])),
+     ("fashion", ["fashion", "runway", "couture", "designer", "modeling"],
+      ["Documentary", "Reality"])),
 ]
 
 _BRIDGE_LABELS_HE = {
@@ -503,9 +516,9 @@ _BRIDGE_LABELS_HE = {
 }
 
 
-def _detect_bridge(msg: str) -> Optional[tuple[str, list[str]]]:
+def _detect_bridge(msg: str) -> Optional[tuple[str, list[str], list[str]]]:
     """If the message mentions a bridgeable real-world topic, return
-    (topic_label, search_keywords); otherwise None."""
+    (topic_label, search_keywords, preferred_genres); otherwise None."""
     m = msg.lower()
     for tokens, payload in _BRIDGE_MAP:
         for tok in tokens:
@@ -936,12 +949,12 @@ def chat_turn(
     # of hard-declining. See _detect_bridge.
     bridge = _detect_bridge(last_user)
     if bridge:
-        topic, keywords = bridge
+        topic, keywords, bridge_genres = bridge
         base_intent = {
             "seeds": [], "mood": [], "length_pref": "any",
             "exclude_genres": [], "lang": detected_lang,
             "language_pref": "any", "free_text": last_user,
-            "keywords": keywords,
+            "keywords": keywords, "bridge_genres": bridge_genres,
         }
         return {
             "action": "search",
