@@ -136,6 +136,11 @@ def intent_to_onboarding_answers(intent: dict) -> dict:
     """
     answers = {"genre": "any", "length": "any", "era": "any", "tone": "any", "popularity": "any"}
 
+    # Explicit genre (from the offline parser or the LLM) maps straight through.
+    genre = intent.get("genre", "any")
+    if genre in GENRE_QUESTION_MAP:
+        answers["genre"] = genre
+
     for mood in (intent.get("mood") or []):
         if mood in MOOD_TO_TONE:
             answers["tone"] = MOOD_TO_TONE[mood]
