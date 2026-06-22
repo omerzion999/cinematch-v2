@@ -156,10 +156,15 @@ def _language_filtered_picks(state, language: str, exclude_titles, top_n=3, inte
 
 
 def _picks_for_intent(state, intent, lang, exclude_titles, top_n=3, prev_recs=None):
-    # Derive genre filter from mood so "action" → filters Action, "funny" → Comedy, etc.
+    # Derive a genre filter from mood (thrilling -> Action, funny -> Comedy) for the
+    # seedless paths only. We deliberately do NOT apply it to the seed-similarity
+    # search below: "something like Breaking Bad" is defined by the SEED, and
+    # layering an Action filter on it dragged in action anime. The seed search uses
+    # the raw intent (year/era/length/popularity still apply).
     mood_genres = [_MOOD_TO_GENRE[m] for m in (intent.get("mood") or []) if m in _MOOD_TO_GENRE]
+    intent_with_genre = intent
     if mood_genres and not intent.get("include_genres"):
-        intent = {**intent, "include_genres": mood_genres}
+        intent_with_genre = {**intent, "include_genres": mood_genres}
 
     keywords = intent.get("keywords") or []
     if keywords:
@@ -170,7 +175,8 @@ def _picks_for_intent(state, intent, lang, exclude_titles, top_n=3, prev_recs=No
             return picks
 
     if intent.get("language_pref") == "he":
-        return _language_filtered_picks(state, "he", exclude_titles, top_n, intent)
+        return _language_filtered_picks(state, "he", exclude_titles, top_n, intent_with_genre)
+
     seeds = intent.get("seeds") or []
     if not seeds and prev_recs:
         seeds = [prev_recs[0]["title"]]
@@ -178,7 +184,7 @@ def _picks_for_intent(state, intent, lang, exclude_titles, top_n=3, prev_recs=No
         picks = _seed_based_picks(state, seeds[0], lang, exclude_titles, top_n, filters=intent)
         if not picks.empty:
             return picks
-    return _preference_picks(state, intent, exclude_titles, top_n)
+    return _preference_picks(state, intent_with_genre, exclude_titles, top_n)
 
 
 @router.post("/api/chat", response_model=ChatResponse)

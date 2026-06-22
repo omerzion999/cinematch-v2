@@ -57,6 +57,31 @@ def test_chat_endpoint_bridge_returns_relevant_cooking_shows(client):
         assert on_topic, f"off-topic bridge pick: {r['title']} ({r['genres']})"
 
 
+# ── Seed similarity ignores the mood-derived genre filter ─────────────────────
+
+def test_seed_similarity_not_corrupted_by_mood_genre(client, monkeypatch):
+    import app.routers.chat as chat_module
+
+    # The LLM tags "like Breaking Bad" with mood dark/thrilling + the seed.
+    monkeypatch.setattr(
+        chat_module, "chat_turn",
+        lambda conversation, prev_recs=None, lang="he": {
+            "action": "search", "reply": "Got it, try these:", "follow_up": "",
+            "intent": {"seeds": ["Breaking Bad"], "mood": ["dark", "thrilling"],
+                       "length_pref": "any", "exclude_genres": [], "lang": "en",
+                       "language_pref": "any", "free_text": "like Breaking Bad"},
+        },
+    )
+    resp = client.post("/api/chat", json={
+        "conversation": [{"role": "user", "content": "something like Breaking Bad"}],
+        "lang": "en",
+    })
+    recs = resp.json()["recommendations"]
+    assert recs
+    # Seed similarity should surface crime/drama neighbours, not action anime.
+    assert all(("Crime" in r["genres"] or "Drama" in r["genres"]) for r in recs)
+
+
 # ── Fuzzy title lookup ────────────────────────────────────────────────────────
 
 def test_fuzzy_lookup_exact(catalog):
