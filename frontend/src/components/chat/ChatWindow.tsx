@@ -12,6 +12,7 @@ import type { RecCard as RecCardData } from "@/lib/types";
 import { MessageBubble } from "./MessageBubble";
 import { OnboardingQuestion } from "./OnboardingQuestion";
 import { RecCardGrid } from "./RecCardGrid";
+import { SeedPicker } from "./SeedPicker";
 import { ShowDetailsModal } from "./ShowDetailsModal";
 
 export function ChatWindow() {
@@ -176,6 +177,17 @@ export function ChatWindow() {
                       message={message}
                       lang={state.lang}
                       onSelectShow={handleSelectShow}
+                    />
+                  );
+                case "seedpick":
+                  return (
+                    <SeedPicker
+                      key={message.id}
+                      message={message}
+                      lang={state.lang}
+                      onToggle={(title) => dispatch({ type: "TOGGLE_SEED", title })}
+                      onConfirm={() => dispatch({ type: "CONFIRM_SEEDS" })}
+                      onSkip={() => dispatch({ type: "SKIP_SEEDS" })}
                     />
                   );
                 default:

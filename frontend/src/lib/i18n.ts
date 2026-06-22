@@ -24,6 +24,10 @@ export const UI_STRINGS: Record<Lang, Record<string, string>> = {
     newConversation: "שיחה חדשה",
     questionProgress: "שאלה {step} מתוך {total}",
     onboardingTypeHint: "אפשר לבחור למעלה, או לכתוב משהו כמו \"קומדיה\".",
+    seedPrompt: "מכיר מישהי מאלה? בחר עד 3 שאהבת ואמליץ על דומות (או דלג).",
+    seedSkip: "אף אחת מאלה / דלג",
+    seedContinue: "המשך עם הבחירות",
+    seedLoading: "טוען כמה סדרות מוכרות...",
   },
   en: {
     openingMessage:
@@ -48,6 +52,10 @@ export const UI_STRINGS: Record<Lang, Record<string, string>> = {
     newConversation: "New conversation",
     questionProgress: "Question {step} of {total}",
     onboardingTypeHint: "Pick one above, or type something like \"comedy\".",
+    seedPrompt: "Recognize any of these? Pick up to 3 you love and I'll match similar shows (or skip).",
+    seedSkip: "None of these / Skip",
+    seedContinue: "Continue with picks",
+    seedLoading: "Loading a few recognizable shows...",
   },
 };
 

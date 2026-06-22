@@ -19,12 +19,11 @@ describe("shared types", () => {
 
     const answers: OnboardingAnswers = {
       genre: "drama",
-      length: "medium",
       era: "recent",
       popularity: "any",
     };
 
-    const req: RecommendRequest = { answers, lang: "en" };
+    const req: RecommendRequest = { answers, seeds: ["Breaking Bad"], lang: "en" };
     expect(req.answers.genre).toBe("drama");
     expect(req.lang).toBe("en");
 

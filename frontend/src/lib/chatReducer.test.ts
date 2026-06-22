@@ -74,35 +74,68 @@ describe("chatReducer", () => {
     expect(greeting.content.length).toBeGreaterThan(0);
   });
 
-  it("walks through all 4 onboarding questions and ends in loading_recommend with all answers recorded", () => {
+  it("walks genre -> seed pick -> era -> popularity, ending in loading_recommend with answers + seeds", () => {
     let state = chatReducer(createInitialState("he"), { type: "START_ONBOARDING" });
 
-    const answeredValues = ["drama", "medium", "recent", "hidden_gem"];
-    for (let i = 0; i < ONBOARDING_QUESTIONS.length; i++) {
-      const question = ONBOARDING_QUESTIONS[i];
-      state = chatReducer(state, {
-        type: "ANSWER_ONBOARDING_QUESTION",
-        questionId: question.id,
-        value: answeredValues[i],
-      });
-    }
+    // Genre answer detours into the seed-picker step.
+    state = chatReducer(state, { type: "ANSWER_ONBOARDING_QUESTION", questionId: "genre", value: "drama" });
+    expect(state.phase).toBe("seed_pick");
+    expect(state.messages.some((m) => m.type === "seedpick")).toBe(true);
+
+    // Seeds load, user picks one, then confirms.
+    state = chatReducer(state, { type: "SEEDS_LOADED", cards: [SAMPLE_CARD] });
+    state = chatReducer(state, { type: "TOGGLE_SEED", title: SAMPLE_CARD.title });
+    state = chatReducer(state, { type: "CONFIRM_SEEDS" });
+    expect(state.seeds).toEqual([SAMPLE_CARD.title]);
+    expect(state.phase).toBe("onboarding");
+    expect(state.onboardingStepIndex).toBe(1); // resumed at era
+
+    // Remaining refine questions.
+    state = chatReducer(state, { type: "ANSWER_ONBOARDING_QUESTION", questionId: "era", value: "recent" });
+    state = chatReducer(state, { type: "ANSWER_ONBOARDING_QUESTION", questionId: "popularity", value: "hidden_gem" });
 
     expect(state.phase).toBe("loading_recommend");
-    expect(state.onboardingAnswers).toEqual({
-      genre: "drama",
-      length: "medium",
-      era: "recent",
-      popularity: "hidden_gem",
-    });
+    expect(state.onboardingAnswers).toEqual({ genre: "drama", era: "recent", popularity: "hidden_gem" });
 
-    // opening message + 4 questions, all closed (answered)
-    const choiceMessages = state.messages.filter(
-      (m): m is ChoiceMessage => m.type === "choice"
-    );
-    expect(choiceMessages).toHaveLength(5);
+    // opening + genre + era + popularity = 4 closed choice messages (seedpick is separate)
+    const choiceMessages = state.messages.filter((m): m is ChoiceMessage => m.type === "choice");
+    expect(choiceMessages).toHaveLength(4);
     for (const message of choiceMessages) {
       expect(message.selectedValue).toBeTruthy();
     }
+  });
+
+  it("genre 'any' (Surprise me) skips the seed step and advances straight to era", () => {
+    let state = chatReducer(createInitialState("he"), { type: "START_ONBOARDING" });
+    state = chatReducer(state, { type: "ANSWER_ONBOARDING_QUESTION", questionId: "genre", value: "any" });
+    expect(state.phase).toBe("onboarding");
+    expect(state.onboardingStepIndex).toBe(1);
+    expect(state.messages.some((m) => m.type === "seedpick")).toBe(false);
+  });
+
+  it("SKIP_SEEDS leaves seeds empty, marks the step done, and resumes onboarding", () => {
+    let state = chatReducer(createInitialState("he"), { type: "START_ONBOARDING" });
+    state = chatReducer(state, { type: "ANSWER_ONBOARDING_QUESTION", questionId: "genre", value: "crime" });
+    state = chatReducer(state, { type: "SEEDS_LOADED", cards: [SAMPLE_CARD] });
+    state = chatReducer(state, { type: "TOGGLE_SEED", title: SAMPLE_CARD.title });
+    state = chatReducer(state, { type: "SKIP_SEEDS" });
+    expect(state.seeds).toEqual([]);
+    expect(state.phase).toBe("onboarding");
+    const seedMsg = state.messages.find((m) => m.type === "seedpick");
+    expect(seedMsg && seedMsg.type === "seedpick" && seedMsg.done).toBe(true);
+  });
+
+  it("TOGGLE_SEED caps selection at 3", () => {
+    let state = chatReducer(createInitialState("he"), { type: "START_ONBOARDING" });
+    state = chatReducer(state, { type: "ANSWER_ONBOARDING_QUESTION", questionId: "genre", value: "drama" });
+    const cards: RecCard[] = ["A", "B", "C", "D"].map((t) => ({ ...SAMPLE_CARD, title: t }));
+    state = chatReducer(state, { type: "SEEDS_LOADED", cards });
+    for (const t of ["A", "B", "C", "D"]) {
+      state = chatReducer(state, { type: "TOGGLE_SEED", title: t });
+    }
+    const seedMsg = state.messages.find((m) => m.type === "seedpick");
+    const selected = seedMsg && seedMsg.type === "seedpick" ? seedMsg.selectedTitles : [];
+    expect(selected).toEqual(["A", "B", "C"]);
   });
 
   it("RECOMMEND_SUCCESS appends intro, recommendation cards, and outro, and returns to chat phase", () => {
@@ -239,6 +272,8 @@ describe("chatReducer", () => {
       questionId: "genre",
       value: "drama",
     });
+    // Skip the seed step to reach the next refine question (era).
+    state = chatReducer(state, { type: "SKIP_SEEDS" });
 
     const next = chatReducer(state, { type: "TOGGLE_LANG" });
     expect(next.lang).toBe("en");
@@ -250,9 +285,12 @@ describe("chatReducer", () => {
       ONBOARDING_QUESTIONS[0].options.find((o) => o.value === "drama")!.label.en
     );
 
-    const lengthQuestion = next.messages[2] as ChoiceMessage;
-    expect(lengthQuestion.prompt).toBe(ONBOARDING_QUESTIONS[1].prompt.en);
-    expect(lengthQuestion.options.map((o) => o.label)).toEqual(
+    // The next choice message after the (separate) seedpick message is the era question.
+    const eraQuestion = next.messages.find(
+      (m, i): m is ChoiceMessage => i > 1 && m.type === "choice"
+    )!;
+    expect(eraQuestion.prompt).toBe(ONBOARDING_QUESTIONS[1].prompt.en);
+    expect(eraQuestion.options.map((o) => o.label)).toEqual(
       ONBOARDING_QUESTIONS[1].options.map((o) => o.label.en)
     );
 

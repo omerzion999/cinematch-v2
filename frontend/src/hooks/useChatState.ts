@@ -1,5 +1,5 @@
 import { useEffect, useReducer } from "react";
-import { postChat, postRecommend } from "@/lib/api";
+import { getSeeds, postChat, postRecommend } from "@/lib/api";
 import {
   chatReducer,
   createInitialState,
@@ -27,12 +27,37 @@ export function useChatState(defaultLang: Lang): UseChatStateResult {
     savePersistedState(state);
   }, [state]);
 
-  // Onboarding finished -> ask the backend for cluster-based recommendations.
+  // Entered the seed-picker step -> fetch recognizable shows for the chosen genre.
+  useEffect(() => {
+    if (state.phase !== "seed_pick") return;
+
+    let cancelled = false;
+    getSeeds(state.onboardingAnswers.genre, state.lang)
+      .then((response) => {
+        if (cancelled) return;
+        if (response.seeds.length === 0) {
+          dispatch({ type: "SKIP_SEEDS" });
+        } else {
+          dispatch({ type: "SEEDS_LOADED", cards: response.seeds });
+        }
+      })
+      .catch(() => {
+        // Never strand onboarding: skip the seed step on any failure.
+        if (!cancelled) dispatch({ type: "SKIP_SEEDS" });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.phase]);
+
+  // Onboarding finished -> ask the backend for personalized recommendations.
   useEffect(() => {
     if (state.phase !== "loading_recommend") return;
 
     let cancelled = false;
-    postRecommend({ answers: state.onboardingAnswers, lang: state.lang })
+    postRecommend({ answers: state.onboardingAnswers, seeds: state.seeds, lang: state.lang })
       .then((response) => {
         if (cancelled) return;
         if (response.recommendations.length === 0) {

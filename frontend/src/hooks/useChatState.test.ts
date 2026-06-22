@@ -84,15 +84,66 @@ describe("useChatState", () => {
     });
 
     expect(api.postRecommend).toHaveBeenCalledWith({
-      answers: {
-        genre: "any",
-        length: "any",
-        era: "any",
-        popularity: "any",
-      },
+      answers: { genre: "any", era: "any", popularity: "any" },
+      seeds: [],
       lang: "he",
     });
     expect(result.current.state.prevRecs).toHaveLength(1);
+  });
+
+  it("fetches seeds when a concrete genre is chosen and carries picks into postRecommend", async () => {
+    const seedCard = {
+      title: "Breaking Bad",
+      genres: "Crime, Drama",
+      rating: 9.5,
+      overview: "...",
+      poster_path: null,
+      decade_str: "2000s",
+      num_seasons: 5,
+    };
+    vi.mocked(api.getSeeds).mockResolvedValue({ genre: "crime", seeds: [seedCard] });
+    vi.mocked(api.postRecommend).mockResolvedValue({
+      intro: "x", outro: "y", cluster_id: 1,
+      recommendations: [{ ...seedCard, title: "Ozark", binge_fit_score: 0.8, explanation: "..." }],
+    });
+
+    const { result } = renderHook(() => useChatState("en"));
+
+    act(() => {
+      result.current.dispatch({ type: "START_ONBOARDING" });
+    });
+    act(() => {
+      result.current.dispatch({ type: "ANSWER_ONBOARDING_QUESTION", questionId: "genre", value: "crime" });
+    });
+    expect(result.current.state.phase).toBe("seed_pick");
+
+    await waitFor(() => {
+      expect(api.getSeeds).toHaveBeenCalledWith("crime", "en");
+      const seedMsg = result.current.state.messages.find((m) => m.type === "seedpick");
+      expect(seedMsg && seedMsg.type === "seedpick" && seedMsg.cards).toHaveLength(1);
+    });
+
+    act(() => {
+      result.current.dispatch({ type: "TOGGLE_SEED", title: "Breaking Bad" });
+    });
+    act(() => {
+      result.current.dispatch({ type: "CONFIRM_SEEDS" });
+    });
+    act(() => {
+      result.current.dispatch({ type: "ANSWER_ONBOARDING_QUESTION", questionId: "era", value: "any" });
+    });
+    act(() => {
+      result.current.dispatch({ type: "ANSWER_ONBOARDING_QUESTION", questionId: "popularity", value: "any" });
+    });
+
+    await waitFor(() => {
+      expect(result.current.state.phase).toBe("chat");
+    });
+    expect(api.postRecommend).toHaveBeenCalledWith({
+      answers: { genre: "crime", era: "any", popularity: "any" },
+      seeds: ["Breaking Bad"],
+      lang: "en",
+    });
   });
 
   it("calls postChat when the user sends a message and applies the reply", async () => {

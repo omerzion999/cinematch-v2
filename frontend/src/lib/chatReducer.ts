@@ -2,7 +2,13 @@ import { BACKEND_STRINGS, UI_STRINGS } from "./i18n";
 import { ONBOARDING_QUESTIONS, type OnboardingQuestion } from "./onboarding";
 import type { Lang, OnboardingAnswers, RecCard } from "./types";
 
-export type Phase = "intro" | "onboarding" | "loading_recommend" | "loading_chat" | "chat";
+export type Phase =
+  | "intro"
+  | "onboarding"
+  | "seed_pick"
+  | "loading_recommend"
+  | "loading_chat"
+  | "chat";
 
 export interface TextMessage {
   id: string;
@@ -35,13 +41,27 @@ export interface RecommendationsMessage {
   cards: RecCard[];
 }
 
-export type ChatMessage = TextMessage | ChoiceMessage | RecommendationsMessage;
+/** Seed-picker step: selectable recognizable shows for the chosen genre. */
+export interface SeedPickMessage {
+  id: string;
+  type: "seedpick";
+  role: "assistant";
+  /** null while /api/seeds is loading. */
+  cards: RecCard[] | null;
+  selectedTitles: string[];
+  /** true once the user confirmed or skipped (locks the step). */
+  done: boolean;
+}
+
+export type ChatMessage = TextMessage | ChoiceMessage | RecommendationsMessage | SeedPickMessage;
 
 export interface ChatState {
   phase: Phase;
   lang: Lang;
   onboardingStepIndex: number;
   onboardingAnswers: OnboardingAnswers;
+  /** Titles the user picked in the seed step (drives multi-seed similarity). */
+  seeds: string[];
   messages: ChatMessage[];
   prevRecs: RecCard[] | null;
 }
@@ -50,6 +70,10 @@ export type ChatAction =
   | { type: "START_ONBOARDING" }
   | { type: "SKIP_TO_CHAT" }
   | { type: "ANSWER_ONBOARDING_QUESTION"; questionId: keyof OnboardingAnswers; value: string }
+  | { type: "SEEDS_LOADED"; cards: RecCard[] }
+  | { type: "TOGGLE_SEED"; title: string }
+  | { type: "CONFIRM_SEEDS" }
+  | { type: "SKIP_SEEDS" }
   | { type: "RECOMMEND_SUCCESS"; intro: string; outro: string; cards: RecCard[] }
   | { type: "RECOMMEND_ERROR"; message: string }
   | { type: "SEND_USER_MESSAGE"; content: string }
@@ -67,10 +91,12 @@ export type ChatAction =
 
 const DEFAULT_ONBOARDING_ANSWERS: OnboardingAnswers = {
   genre: "any",
-  length: "any",
   era: "any",
   popularity: "any",
 };
+
+/** Max seeds a user may pick in the seed step. */
+export const MAX_SEEDS = 3;
 
 export function createInitialState(lang: Lang): ChatState {
   const strings = UI_STRINGS[lang];
@@ -79,6 +105,7 @@ export function createInitialState(lang: Lang): ChatState {
     lang,
     onboardingStepIndex: -1,
     onboardingAnswers: { ...DEFAULT_ONBOARDING_ANSWERS },
+    seeds: [],
     messages: [
       {
         id: crypto.randomUUID(),
@@ -108,6 +135,40 @@ function buildQuestionMessage(
     options: question.options.map((o) => ({ value: o.value, label: o.label[lang] })),
     progress: { step: stepIndex + 1, total: ONBOARDING_QUESTIONS.length },
   };
+}
+
+function buildSeedPickMessage(): SeedPickMessage {
+  return {
+    id: crypto.randomUUID(),
+    type: "seedpick",
+    role: "assistant",
+    cards: null,
+    selectedTitles: [],
+    done: false,
+  };
+}
+
+/**
+ * Advances onboarding past the question at `fromIndex`: pushes the next question,
+ * or moves to loading_recommend when there are no more questions.
+ */
+function advanceAfterQuestion(
+  state: ChatState,
+  fromIndex: number,
+  answers: OnboardingAnswers,
+  messages: ChatMessage[]
+): ChatState {
+  const nextIndex = fromIndex + 1;
+  if (nextIndex < ONBOARDING_QUESTIONS.length) {
+    return {
+      ...state,
+      onboardingAnswers: answers,
+      onboardingStepIndex: nextIndex,
+      phase: "onboarding",
+      messages: [...messages, buildQuestionMessage(ONBOARDING_QUESTIONS[nextIndex], state.lang, nextIndex)],
+    };
+  }
+  return { ...state, onboardingAnswers: answers, phase: "loading_recommend", messages };
 }
 
 /**
@@ -227,21 +288,58 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       } as OnboardingAnswers;
       const messages = closeLastChoice(state.messages, action.value, label);
 
-      const nextIndex = state.onboardingStepIndex + 1;
-      if (nextIndex < ONBOARDING_QUESTIONS.length) {
+      // Seed detour: after a concrete genre (not "Surprise me"), show the seed
+      // picker before the remaining refine questions. "any" has no seed list, so
+      // it falls through to the normal question flow.
+      if (question.id === "genre" && action.value !== "any") {
         return {
           ...state,
           onboardingAnswers: updatedAnswers,
-          onboardingStepIndex: nextIndex,
-          messages: [...messages, buildQuestionMessage(ONBOARDING_QUESTIONS[nextIndex], state.lang, nextIndex)],
+          seeds: [],
+          phase: "seed_pick",
+          messages: [...messages, buildSeedPickMessage()],
         };
       }
-      return {
-        ...state,
-        onboardingAnswers: updatedAnswers,
-        phase: "loading_recommend",
-        messages,
-      };
+
+      return advanceAfterQuestion(state, state.onboardingStepIndex, updatedAnswers, messages);
+    }
+
+    case "SEEDS_LOADED": {
+      const messages = state.messages.map((m) =>
+        m.type === "seedpick" && !m.done ? { ...m, cards: action.cards } : m
+      );
+      return { ...state, messages };
+    }
+
+    case "TOGGLE_SEED": {
+      const messages = state.messages.map((m) => {
+        if (m.type !== "seedpick" || m.done) return m;
+        const has = m.selectedTitles.includes(action.title);
+        if (has) {
+          return { ...m, selectedTitles: m.selectedTitles.filter((t) => t !== action.title) };
+        }
+        if (m.selectedTitles.length >= MAX_SEEDS) return m; // cap reached, ignore
+        return { ...m, selectedTitles: [...m.selectedTitles, action.title] };
+      });
+      return { ...state, messages };
+    }
+
+    case "CONFIRM_SEEDS":
+    case "SKIP_SEEDS": {
+      const open = state.messages.find((m) => m.type === "seedpick" && !m.done) as
+        | SeedPickMessage
+        | undefined;
+      const picked = action.type === "CONFIRM_SEEDS" && open ? open.selectedTitles : [];
+      const messages = state.messages.map((m) =>
+        m.type === "seedpick" && !m.done ? { ...m, selectedTitles: picked, done: true } : m
+      );
+      // Genre is always step 0; resume the remaining refine questions after it.
+      return advanceAfterQuestion(
+        { ...state, seeds: picked },
+        state.onboardingStepIndex,
+        state.onboardingAnswers,
+        messages
+      );
     }
 
     case "RECOMMEND_SUCCESS": {

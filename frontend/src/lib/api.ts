@@ -4,6 +4,7 @@ import type {
   Lang,
   RecommendRequest,
   RecommendResponse,
+  SeedsResponse,
   ShowDetails,
   TranslateRequest,
   TranslateResponse,
@@ -39,6 +40,15 @@ export function postRecommend(request: RecommendRequest): Promise<RecommendRespo
 
 export function postChat(request: ChatRequest): Promise<ChatResponse> {
   return postJson<ChatResponse>("/chat", request);
+}
+
+export async function getSeeds(genre: string, lang: Lang): Promise<SeedsResponse> {
+  const url = `${API_BASE}/seeds?genre=${encodeURIComponent(genre)}&lang=${lang}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new ApiError(`GET ${url} failed with status ${res.status}`, res.status);
+  }
+  return res.json() as Promise<SeedsResponse>;
 }
 
 export function postTranslate(request: TranslateRequest): Promise<TranslateResponse> {

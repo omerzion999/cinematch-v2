@@ -2,14 +2,19 @@ export type Lang = "he" | "en";
 
 export interface OnboardingAnswers {
   genre: "drama" | "comedy" | "action_adventure" | "scifi_fantasy" | "crime" | "animation" | "any";
-  length: "short" | "medium" | "long" | "any";
   era: "recent" | "modern" | "classic" | "any";
   popularity: "well_known" | "hidden_gem" | "any";
 }
 
 export interface RecommendRequest {
   answers: OnboardingAnswers;
+  seeds: string[];
   lang: Lang;
+}
+
+export interface SeedsResponse {
+  genre: string;
+  seeds: RecCard[];
 }
 
 /** A recommendation card as returned by /api/chat (no per-card explanation). */

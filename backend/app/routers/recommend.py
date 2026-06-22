@@ -9,9 +9,14 @@ from pydantic import BaseModel
 from app.agent.explanations import explain_picks
 from app.clustering.onboarding_map import build_user_vector
 from app.clustering.recommend import nearest_cluster
+from app.engine.hybrid import recommend_from_seeds
 from app.engine.preference import rank_by_preferences
 from app.i18n import t
 from app.poster import resolve_poster_path
+
+# Onboarding era/popularity answers -> hybrid apply_filters keys, used to refine
+# the multi-seed similarity results when the user answered those refine questions.
+_ERA_FILTER = {"recent": "recent", "modern": "2010s", "classic": "classic"}
 
 router = APIRouter()
 
@@ -66,13 +71,13 @@ class OnboardingAnswers(BaseModel):
         "drama", "comedy", "action_adventure", "scifi_fantasy",
         "crime", "animation", "any",
     ] = "any"
-    length: Literal["short", "medium", "long", "any"] = "any"
     era: Literal["recent", "modern", "classic", "any"] = "any"
     popularity: Literal["well_known", "hidden_gem", "any"] = "any"
 
 
 class RecommendRequest(BaseModel):
     answers: OnboardingAnswers
+    seeds: list[str] = []
     lang: Literal["he", "en"] = "he"
 
 
@@ -114,7 +119,25 @@ def recommend(payload: RecommendRequest, request: Request) -> RecommendResponse:
     )
     profile = _taste_profile(answers)
 
-    picks_df = rank_by_preferences(state["catalog_with_features"], answers, top_n=3)
+    if payload.seeds:
+        # Seed-picker path: recommend titles similar to the shows the user picked,
+        # refined by the era/popularity answers (length is no longer asked).
+        filters: dict = {}
+        if answers.get("era") in _ERA_FILTER:
+            filters["era_pref"] = _ERA_FILTER[answers["era"]]
+        if answers.get("popularity") in ("well_known", "hidden_gem"):
+            filters["popularity_pref"] = answers["popularity"]
+        picks_df = recommend_from_seeds(
+            payload.seeds,
+            state["catalog"],
+            state["numeric_matrix"],
+            state["embeddings"],
+            top_n=3,
+            filters=filters or None,
+            query_lang=lang,
+        )
+    else:
+        picks_df = rank_by_preferences(state["catalog_with_features"], answers, top_n=3)
 
     if picks_df.empty:
         return RecommendResponse(

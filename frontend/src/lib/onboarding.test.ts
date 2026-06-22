@@ -3,10 +3,9 @@ import { ONBOARDING_QUESTIONS, resolveTypedAnswer } from "./onboarding";
 import type { OnboardingAnswers } from "./types";
 
 describe("ONBOARDING_QUESTIONS", () => {
-  it("has exactly 4 questions, in the order genre, length, era, popularity", () => {
+  it("has exactly 3 questions, in the order genre, era, popularity", () => {
     expect(ONBOARDING_QUESTIONS.map((q) => q.id)).toEqual([
       "genre",
-      "length",
       "era",
       "popularity",
     ]);
@@ -34,7 +33,6 @@ describe("ONBOARDING_QUESTIONS", () => {
         "animation",
         "any",
       ],
-      length: ["short", "medium", "long", "any"],
       era: ["recent", "modern", "classic", "any"],
       popularity: ["well_known", "hidden_gem", "any"],
     };
@@ -56,7 +54,6 @@ describe("ONBOARDING_QUESTIONS", () => {
 
 describe("resolveTypedAnswer", () => {
   const genreQ = ONBOARDING_QUESTIONS.find((q) => q.id === "genre")!;
-  const lengthQ = ONBOARDING_QUESTIONS.find((q) => q.id === "length")!;
   const eraQ = ONBOARDING_QUESTIONS.find((q) => q.id === "era")!;
   const popularityQ = ONBOARDING_QUESTIONS.find((q) => q.id === "popularity")!;
 
@@ -72,8 +69,7 @@ describe("resolveTypedAnswer", () => {
     expect(resolveTypedAnswer(genreQ, "מצחיק", "he")).toBe("comedy");
   });
 
-  it("maps English free text to length, era, and popularity", () => {
-    expect(resolveTypedAnswer(lengthQ, "something short", "en")).toBe("short");
+  it("maps English free text to era and popularity", () => {
     expect(resolveTypedAnswer(eraQ, "the newest shows", "en")).toBe("recent");
     expect(resolveTypedAnswer(eraQ, "modern stuff", "en")).toBe("modern");
     expect(resolveTypedAnswer(popularityQ, "a hidden gem please", "en")).toBe("hidden_gem");
