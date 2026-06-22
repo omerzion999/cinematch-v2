@@ -35,25 +35,6 @@ export const ONBOARDING_QUESTIONS: { [K in keyof OnboardingAnswers]: OnboardingQ
     ],
   },
   {
-    id: "length",
-    prompt: {
-      he: "כמה עונות בא לך?",
-      en: "How long do you want it?",
-    },
-    options: [
-      {
-        value: "short",
-        label: { he: "קצר (1-2 עונות)", en: "Quick (1-2 seasons)" },
-      },
-      {
-        value: "medium",
-        label: { he: "בינוני (3-5 עונות)", en: "Medium (3-5 seasons)" },
-      },
-      { value: "long", label: { he: "ארוך (6+ עונות)", en: "Long (6+ seasons)" } },
-      { value: "any", label: { he: "לא משנה", en: "Any" } },
-    ],
-  },
-  {
     id: "era",
     prompt: {
       he: "איזה עידן מעניין אותך?",
@@ -104,10 +85,6 @@ const TYPED_SYNONYMS: Record<string, string[]> = {
     "action", "adventure", "אקשן", "פעולה", "הרפתקה", "הרפתקאות",
   ],
   animation: ["animation", "animated", "cartoon", "anime", "אנימציה", "מצויר", "אנימה"],
-  // length
-  short: ["short", "quick", "mini", "1", "2", "one season", "two season", "קצר", "מיני", "עונה אחת"],
-  medium: ["medium", "mid", "3", "4", "5", "בינוני", "אמצע"],
-  long: ["long", "epic", "6", "many seasons", "ארוך", "הרבה עונות"],
   // era
   recent: ["recent", "new", "newest", "latest", "2020", "2021", "2022", "2023", "2024", "חדש", "עכשווי", "אחרון"],
   modern: ["modern", "2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018", "2019", "מודרני", "עשור"],

@@ -1,0 +1,63 @@
+{
+  "_comment": "Curated, globally recognizable seed shows per onboarding genre. Hand-picked (the catalog's `votes` column skews to anime/telenovela/Marvel, so a pure top-votes pick is not recognizable). Every title is validated to exist in catalog.parquet with an EXACT title match by tests/test_seeds.py. Most are IMDb-sourced rows with an empty poster_path, so GET /api/seeds resolves their posters via the TMDB fallback (app/poster.py) at request time and caches per genre.",
+  "drama": [
+    "Breaking Bad",
+    "Game of Thrones",
+    "Stranger Things",
+    "The Crown",
+    "Peaky Blinders",
+    "The Sopranos",
+    "Mad Men",
+    "Euphoria"
+  ],
+  "comedy": [
+    "The Office",
+    "Friends",
+    "Brooklyn Nine-Nine",
+    "Parks and Recreation",
+    "The Big Bang Theory",
+    "Ted Lasso",
+    "Seinfeld",
+    "Modern Family"
+  ],
+  "crime": [
+    "Breaking Bad",
+    "Better Call Saul",
+    "Narcos",
+    "Money Heist",
+    "True Detective",
+    "Dexter",
+    "Sherlock",
+    "Ozark"
+  ],
+  "scifi_fantasy": [
+    "Stranger Things",
+    "Game of Thrones",
+    "The Witcher",
+    "Black Mirror",
+    "The Mandalorian",
+    "The Boys",
+    "Westworld",
+    "Doctor Who"
+  ],
+  "action_adventure": [
+    "The Mandalorian",
+    "The Witcher",
+    "Vikings",
+    "The Boys",
+    "Prison Break",
+    "Cobra Kai",
+    "The Last of Us",
+    "Money Heist"
+  ],
+  "animation": [
+    "Rick and Morty",
+    "BoJack Horseman",
+    "Attack on Titan",
+    "Death Note",
+    "Avatar: The Last Airbender",
+    "The Simpsons",
+    "One Piece",
+    "Arcane"
+  ]
+}

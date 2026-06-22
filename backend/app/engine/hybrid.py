@@ -12,6 +12,7 @@ Default weights tuned on a 10-pair hand-rated preference set:
 
 import numpy as np
 import pandas as pd
+from app.catalog_lookup import find_catalog_index
 from app.engine.jaccard import top_k_jaccard
 from app.engine.cosine import top_k_cosine_numeric, top_k_cosine_text
 
@@ -221,6 +222,77 @@ def recommend(
         candidates = apply_filters(candidates, filters)
     result = candidates.head(top_n).reset_index(drop=True)
     return result
+
+
+def recommend_from_seeds(
+    seed_titles: list[str],
+    catalog: pd.DataFrame,
+    numeric_matrix: np.ndarray,
+    embeddings: np.ndarray,
+    top_n: int = 3,
+    exclude_titles: set = None,
+    filters: dict = None,
+    query_lang: str = "en",
+    per_seed_k: int = 100,
+) -> pd.DataFrame:
+    """
+    Multi-seed similarity: recommend titles similar to a set of liked shows.
+
+    For each seed we run the single-seed hybrid recommender and then merge the
+    candidate pools by the MAX hybrid_score a title earns across seeds (a title
+    that is a strong neighbour of ANY picked seed surfaces). The seeds themselves
+    are excluded, era/popularity filters (if any) are applied to the merged pool,
+    and the top_n (dynamic 1..top_n) are returned with the same columns as
+    `recommend`.
+    """
+    exclude_titles = set(exclude_titles or set())
+
+    # Resolve seeds to their canonical catalog titles; exclude them from results.
+    resolved: list[str] = []
+    for title in seed_titles:
+        idx = find_catalog_index(catalog, title)
+        if idx is None:
+            continue
+        resolved.append(catalog.iloc[idx]["title"])
+    if not resolved:
+        return pd.DataFrame()
+    exclude_titles |= set(resolved)
+
+    # Best row + best score per candidate title across all seeds.
+    best: dict[str, dict] = {}
+    for seed_title in resolved:
+        idx = find_catalog_index(catalog, seed_title)
+        res = recommend(
+            query_title=seed_title,
+            catalog=catalog,
+            numeric_matrix=numeric_matrix,
+            embeddings=embeddings,
+            query_embedding=embeddings[idx],
+            top_n=per_seed_k,
+            exclude_titles=exclude_titles,
+            query_lang=query_lang,
+            filters=None,
+        )
+        for _, row in res.iterrows():
+            t = row["title"]
+            if t not in best or row["hybrid_score"] > best[t]["hybrid_score"]:
+                best[t] = row
+    if not best:
+        return pd.DataFrame()
+
+    merged = pd.DataFrame(list(best.values())).sort_values(
+        "hybrid_score", ascending=False
+    ).reset_index(drop=True)
+
+    # Era/popularity are OPTIONAL refine answers in the seed flow: prefer the
+    # filtered pool, but never strand the user with nothing when their seeds
+    # genuinely matched. Fall back to the unfiltered neighbours if the filter
+    # empties the pool.
+    if filters:
+        filtered = apply_filters(merged, filters)
+        if not filtered.empty:
+            merged = filtered
+    return merged.head(top_n).reset_index(drop=True)
 
 
 def score_all_pairs(

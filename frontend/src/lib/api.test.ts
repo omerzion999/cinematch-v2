@@ -20,7 +20,8 @@ describe("api client", () => {
 
   it("postRecommend POSTs to /api/recommend and returns the parsed response", async () => {
     const request: RecommendRequest = {
-      answers: { genre: "drama", length: "any", era: "any", popularity: "any" },
+      answers: { genre: "drama", era: "any", popularity: "any" },
+      seeds: [],
       lang: "he",
     };
     const responseBody = { intro: "...", outro: "...", cluster_id: 1, recommendations: [] };
@@ -112,7 +113,8 @@ describe("api client", () => {
   it("postRecommend throws ApiError on a non-2xx response", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({}, 500));
     const request: RecommendRequest = {
-      answers: { genre: "any", length: "any", era: "any", popularity: "any" },
+      answers: { genre: "any", era: "any", popularity: "any" },
+      seeds: [],
       lang: "he",
     };
 
@@ -127,7 +129,8 @@ describe("api client", () => {
   it("propagates a network-level fetch rejection", async () => {
     vi.mocked(fetch).mockRejectedValueOnce(new TypeError("Failed to fetch"));
     const request: RecommendRequest = {
-      answers: { genre: "any", length: "any", era: "any", popularity: "any" },
+      answers: { genre: "any", era: "any", popularity: "any" },
+      seeds: [],
       lang: "he",
     };
 
