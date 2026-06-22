@@ -488,7 +488,7 @@ _BRIDGE_MAP: list[tuple[list[str], tuple[str, list[str], list[str]]]] = [
     (["cook", "cooking", "recipe", "pasta", "bake", "baking", "chef", "kitchen",
       "food", "מבשל", "לבשל", "בישול", "מתכון", "אוכל", "אפיה", "מאפה"],
      ("cooking", ["chef", "cook", "cooking", "kitchen", "culinary", "recipe",
-                  "restaurant", "cuisine", "baking", "food"],
+                  "restaurant", "cuisine", "baking", "bake", "baker", "food"],
       ["Documentary", "Reality", "Family"])),
     (["sport", "sports", "football", "soccer", "basketball", "workout", "gym",
       "ספורט", "כדורגל", "כדורסל", "אימון", "כושר"],
@@ -657,10 +657,10 @@ INTENT (set a field ONLY when explicit, else any/null/[])
 - rating_min/popularity_pref ONLY if stated ("best"->rating_min=8.5; "hidden gem"->hidden_gem; "popular"->trending).
 
 ACTIONS
-- search: a NEW recommendation request (a genre, mood, vibe, "shows like X", "what should I watch"). Bias to action: any watch interest -> search now, do not ask a question first. reply = a GENERIC one-liner ("Try these:"). NEVER name shows in a search/refine reply: you cannot see the engine's picks, and naming wrong ones creates a mismatch.
+- search: a NEW recommendation request with something to go on (a genre, mood, vibe, or "shows like X"). If they NAME a show ("a series like The Office", "similar to Friends"), set seeds=[that show] and search, EVEN IF recs are already on screen: a newly named title is a NEW request, never a swap or refine of the old picks. reply = a GENERIC one-liner ("Try these:"). NEVER name shows in a search/refine reply: you cannot see the engine's picks, and naming wrong ones creates a mismatch.
 - refine: recs already on screen and a new/changed preference (shorter, less dark, in spanish, "2020 and later", "a hidden gem", "more options", "more like the first one"->seeds=[first title]). Put ONLY the new constraint in intent; reply = short generic line. NEVER critique why the current picks fail, just set intent.
-- swap_slot: replace ONE card ("swap #2", "watched the third"); swap_slot_index 0-based; only if prev_recs exist.
-- chat: NOT a fresh recommendation. Greetings, thanks, opinions on a named show, availability (general knowledge + soft caveat), questions about a show in prev_recs, jokes, gibberish (one short "rephrase" line), and statements/identity ("i am israeli", "i'm tired") -> react briefly and LEAD toward a pick. Off-topic (recipe/weather/math): one line "that's not me, I do TV", then offer to find something to watch; never offer to do the off-topic thing. Movies: say you only do series, offer a series instead. You MAY name a show the user just named; never invent other titles.
+- swap_slot: replace ONE card. ONLY for "swap #2" / "I watched the third" / "not the second one"; swap_slot_index 0-based; only if prev_recs exist. A message that names a NEW show ("like The Office") is a search, NOT a swap.
+- chat: NOT a fresh recommendation. Greetings, thanks, opinions on a named show, availability (general knowledge + soft caveat), questions about a show in prev_recs, jokes, gibberish (one short "rephrase" line), and statements/identity ("i am israeli", "i'm tired") -> react briefly and LEAD toward a pick. A totally BLANK request with nothing specific ("recommend something", "what should I watch", "תמליץ לי משהו") -> ask ONE short guiding question (which genre or vibe), do not dump generic picks. Off-topic (recipe/weather/math): one line "that's not me, I do TV", then offer to find something to watch; never offer to do the off-topic thing. Movies: say you only do series, offer a series instead. You MAY name a show the user just named; never invent other titles.
 
 EXAMPLES (intent fields not shown default to any/null/[])
 User: "hi" -> {"action":"chat","reply":"Hey, what are you in the mood for?","intent":{"lang":"en","free_text":"greeting"}}
@@ -671,6 +671,8 @@ User: "what do you think about The Office" -> {"action":"chat","reply":"Comedy g
 User: "where can I watch Seinfeld" -> {"action":"chat","reply":"Usually Netflix, worth a quick JustWatch check.","intent":{"seeds":["Seinfeld"],"lang":"en","free_text":"availability"}}
 User: "recommend a dark thriller" -> {"action":"search","reply":"Try these:","intent":{"mood":["dark","thrilling"],"lang":"en","free_text":"dark thriller"}}
 User: "something like Breaking Bad" -> {"action":"search","reply":"Got it, try these:","intent":{"seeds":["Breaking Bad"],"mood":["dark","thrilling"],"lang":"en","free_text":"like Breaking Bad"}}
+User: "can you recommend a series like The Office" (prev_recs are crime shows) -> {"action":"search","reply":"Sure, similar vibes coming up:","intent":{"seeds":["The Office"],"lang":"en","free_text":"like The Office"}}
+User: "recommend something" -> {"action":"chat","reply":"Happy to help, what genre or vibe are you after?","intent":{"lang":"en","free_text":"blank request, ask a question"}}
 User: "i want a scary movie" -> {"action":"chat","reply":"I only do series, not movies. Want a scary series instead?","intent":{"mood":["thrilling"],"lang":"en","free_text":"movie redirect"}}
 User: "year 2020 and later" (prev_recs) -> {"action":"refine","reply":"Got it, something newer:","intent":{"year_min":2020,"era_pref":"recent","lang":"en","free_text":"2020+"}}
 User: "more options" (prev_recs) -> {"action":"refine","reply":"Sure, more coming up:","intent":{"lang":"en","free_text":"more options"}}
@@ -731,19 +733,32 @@ def _offline_turn(last_user: str, lang: str, fallback: dict) -> dict:
     he = lang == "he"
     m = (last_user or "").strip()
 
-    has_signal = bool(
+    # A real recommendation signal = something to personalize on (a genre, mood,
+    # or a named seed). Only then do we search.
+    strong_signal = bool(
         fallback.get("mood")
         or fallback.get("seeds")
         or _GENRE_SIGNAL_RE.search(m)
-        or _REQUEST_VERB_RE.search(m)
     )
-    if has_signal:
+    if strong_signal:
         return {
             "action": "search",
             "intent": {**fallback, "lang": lang, "language_pref": "any"},
             "reply": "",
             "follow_up": "",
         }
+
+    # Bare request ("recommend something", "what should I watch") with nothing to
+    # personalize on -> guide the user with one short question instead of dumping
+    # generic picks. This makes the agent direct the conversation toward a good,
+    # personal match (the way a real assistant would).
+    if _REQUEST_VERB_RE.search(m):
+        return _offline_chat(
+            "בשמחה! איזה ז'אנר או אווירה בא לך? למשל פשע, קומדיה, או משהו אפל."
+            if he else
+            "Happy to help! What genre or vibe are you in the mood for, like crime, comedy, or something dark?",
+            lang, fallback,
+        )
 
     if any(tok in m.lower() for tok in _CHAT_TOKENS):
         return _offline_chat(
@@ -881,6 +896,29 @@ def chat_turn(
             "action": "search",
             "intent": base_intent,
             "reply": _bridge_reply(topic, detected_lang),
+            "follow_up": "",
+        }
+
+    # ── Explicit similarity-request fast-path (no LLM, robust to rate limits) ──
+    # "recommend a series like The Office", "shows like X", "similar to X",
+    # "כמו X" -> a FRESH similarity search seeded on X, even when recs are already
+    # on screen. A newly named title is a NEW request, never a swap/refine of the
+    # stale picks (the bug where "a series like The Office" swapped a Breaking Bad
+    # pick). Deterministic so it works even when the LLM is rate-limited.
+    if fallback.get("seeds"):
+        base_intent = {
+            "seeds": fallback["seeds"], "mood": [], "length_pref": fallback.get("length_pref", "any"),
+            "exclude_genres": [], "lang": detected_lang, "language_pref": "any",
+            "free_text": last_user,
+            "year_min": fallback.get("year_min"), "year_max": fallback.get("year_max"),
+            "era_pref": fallback.get("era_pref", "any"),
+            "rating_min": fallback.get("rating_min"),
+            "popularity_pref": fallback.get("popularity_pref", "any"),
+        }
+        return {
+            "action": "search",
+            "intent": base_intent,
+            "reply": "הנה כמה המלצות דומות:" if detected_lang == "he" else "Here are a few similar picks:",
             "follow_up": "",
         }
 

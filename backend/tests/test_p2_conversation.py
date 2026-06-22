@@ -36,9 +36,13 @@ def test_chat_turn_bridges_offtopic_to_search(monkeypatch):
     assert result["reply"]  # a warm bridge one-liner
 
 
+_COOKING_WORDS = ("chef", "cook", "cooking", "kitchen", "culinary", "recipe",
+                  "restaurant", "cuisine", "baking", "bake", "baker", "food")
+
+
 def test_chat_endpoint_bridge_returns_relevant_cooking_shows(client):
     resp = client.post("/api/chat", json={
-        "conversation": [{"role": "user", "content": "how do I cook pasta"}],
+        "conversation": [{"role": "user", "content": "i want to make pasta"}],
         "prev_recs": None, "lang": "en",
     })
     assert resp.status_code == 200
@@ -48,13 +52,61 @@ def test_chat_endpoint_bridge_returns_relevant_cooking_shows(client):
     assert body["explanation"] is None              # short answer, no long bubble
 
     catalog_titles = set(client.app.state.cinematch["catalog"]["title"])
-    cooking_genres = ("Documentary", "Reality", "Family")
-    cooking_words = ("chef", "cook", "kitchen", "food", "bak", "cuisine", "culinary")
+    titles = {r["title"] for r in recs}
+    # The makeover show "Queer Eye" mentions "food" once but is not a cooking
+    # show; the topic-strength filter must drop it.
+    assert "Queer Eye" not in titles
     for r in recs:
         assert r["title"] in catalog_titles        # catalog-first, never invented
-        on_topic = any(g in r["genres"] for g in cooking_genres) or \
-            any(w in r["title"].lower() for w in cooking_words)
-        assert on_topic, f"off-topic bridge pick: {r['title']} ({r['genres']})"
+        text = (r["title"] + " " + (r["overview"] or "")).lower()
+        in_title = any(w in r["title"].lower() for w in _COOKING_WORDS)
+        distinct = sum(1 for w in _COOKING_WORDS if w in text)
+        # Actually ABOUT cooking: keyword in the title, or >= 2 distinct food terms.
+        assert in_title or distinct >= 2, f"off-topic bridge pick: {r['title']} ({r['genres']})"
+
+
+def test_chat_similarity_request_starts_fresh_search_seeded_on_named_show(client, monkeypatch):
+    """'recommend a series like The Office' must run a NEW search seeded on The
+    Office (comedy), not swap/refine the stale on-screen crime picks (the bug)."""
+    import app.agent.llm as llm
+    monkeypatch.setattr(llm, "_get_client", lambda: True)
+    monkeypatch.setattr(llm, "_provider", "groq")
+    monkeypatch.setattr(llm, "_call_llm", lambda *a, **k: None)  # force the offline/deterministic path
+
+    prev = [{"title": "Ezel", "genres": "Crime, Drama", "rating": 8.0,
+             "decade_str": "2010s", "overview": ""}]
+    resp = client.post("/api/chat", json={
+        "conversation": [{"role": "user", "content": "can you recommend a series like The Office"}],
+        "prev_recs": prev, "lang": "en",
+    })
+    assert resp.status_code == 200
+    recs = resp.json()["recommendations"]
+    assert recs
+    titles = {r["title"] for r in recs}
+    assert "Ezel" not in titles                      # the stale pick is gone
+    # Neighbours of The Office should be comedies, not the prior crime context.
+    assert all("Comedy" in r["genres"] for r in recs)
+
+
+def test_chat_turn_similarity_request_is_search_not_swap(monkeypatch):
+    monkeypatch.setattr(llm, "_get_client", lambda: True)
+    monkeypatch.setattr(llm, "_provider", "groq")
+    monkeypatch.setattr(llm, "_call_llm", lambda *a, **k: None)
+    prev = [{"title": "Breaking Bad", "genres": "Crime, Drama", "rating": 9.5,
+             "decade_str": "2000s", "overview": ""}]
+    out = llm.chat_turn(
+        [{"role": "user", "content": "shows like Friends"}], prev_recs=prev, lang="en"
+    )
+    assert out["action"] == "search"
+    assert out["intent"]["seeds"] == ["Friends"]
+
+
+def test_offline_blank_request_asks_a_guiding_question(monkeypatch):
+    _force_llm_failure(monkeypatch)
+    for msg in ["recommend something", "what should I watch"]:
+        out = llm.chat_turn([{"role": "user", "content": msg}], lang="en")
+        assert out["action"] == "chat", msg          # guide, do not dump generic picks
+        assert "?" in out["reply"]
 
 
 # ── Seed similarity ignores the mood-derived genre filter ─────────────────────

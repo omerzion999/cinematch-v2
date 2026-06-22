@@ -94,17 +94,23 @@ _ANY_ANSWERS = {"genre": "any", "length": "any", "era": "any", "popularity": "an
 
 
 def _keyword_picks(state, keywords, preferred_genres, exclude_titles, top_n=3):
-    """Bridge search: catalog shows about the topic, ranked by the same quality
-    blend as the preference ranker. Two stages keep results on-topic:
+    """Bridge search: catalog shows actually ABOUT the topic, ranked by the same
+    quality blend as the preference ranker. Two stages keep results on-topic:
       1. keep titles whose overview/title mention a topic keyword;
-      2. of those, keep only ones whose GENRE is a topic genre OR whose TITLE
-         contains a keyword. Step 2 drops shows that merely mention a keyword in
-         passing (e.g. Daredevil's "Hell's Kitchen"). Falls back to step 1 if
-         step 2 is empty, so the bridge still offers something."""
+      2. of those, keep only ones that are clearly ABOUT the topic: a keyword in
+         the TITLE, or at least two distinct topic keywords across title+overview.
+         A single passing mention is not enough (this drops "Queer Eye", a
+         makeover show whose synopsis mentions "food" once, and Daredevil's
+         "Hell's Kitchen"). Now that overviews are ~95% filled this signal is
+         reliable. Falls back to step 1 if step 2 is empty, so the bridge still
+         offers something. preferred_genres is no longer a relevance gate (a broad
+         "Reality" genre let off-topic reality shows through); it stays in the
+         intent only for documentation."""
     catalog = state["catalog_with_features"]
+    kw_list = [k for k in (keywords or []) if k]
     # Word-boundary match so topic keywords do not hit substrings of unrelated
     # words ("world" inside "Westworld", "rock" inside "Rocket").
-    kw_pattern = "|".join(rf"\b{re.escape(k)}\b" for k in keywords if k)
+    kw_pattern = "|".join(rf"\b{re.escape(k)}\b" for k in kw_list)
     if not kw_pattern:
         return catalog.head(0)
 
@@ -114,11 +120,13 @@ def _keyword_picks(state, keywords, preferred_genres, exclude_titles, top_n=3):
     if pool.empty:
         return pool
 
-    genres = pool["genres"].fillna("")
-    genre_pattern = "|".join(re.escape(g) for g in (preferred_genres or []))
-    on_genre = genres.str.contains(genre_pattern, case=False, na=False) if genre_pattern else False
     in_title = pool["title"].fillna("").str.contains(kw_pattern, case=False, na=False, regex=True)
-    relevant = pool[on_genre | in_title]
+    pool_text = (pool["overview"].fillna("") + " " + pool["title"].fillna("")).str.lower()
+    distinct_hits = sum(
+        pool_text.str.contains(rf"\b{re.escape(k.lower())}\b", regex=True).astype(int)
+        for k in kw_list
+    )
+    relevant = pool[in_title | (distinct_hits >= 2)]
     if not relevant.empty:
         pool = relevant
 
