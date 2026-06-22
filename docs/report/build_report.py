@@ -15,7 +15,7 @@ from docx import Document
 from docx.enum.section import WD_SECTION
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
-from docx.shared import Pt, RGBColor
+from docx.shared import Inches, Pt, RGBColor
 
 HERE = os.path.dirname(__file__)
 ANALYSIS = os.path.join(HERE, "..", "analysis")
@@ -181,6 +181,9 @@ def build():
         "רלוונטיות בקטלוג (סדרות בישול) במקום סירוב.",
         "ניקוד binge_fit_score מהונדס ודירוג IMDb משוקלל-הצבעות, כדי שדירוג גבוה מעט-הצבעות "
         "לא יקפוץ מעל כותר איכותי ומוכר.",
+        "אונבורדינג מבוסס-זרעים (seed picker): במקום שאלות מופשטות בלבד, המשתמש בוחר סדרות "
+        "מוכרות שהוא אוהב, והמנוע ההיברידי מאתר סדרות דומות (similarity על מספר זרעים) - "
+        "המלצה אישית ומדויקת יותר שגם ממחישה את המנוע.",
         "דו-לשוניות אמיתית כולל הסברים שוטפים בעברית הנוצרים על ידי המודל.",
     ])
 
@@ -190,8 +193,10 @@ def build():
     bullets(doc, [
         "מודל שפה (LLM): Groq llama-3.1-8b-instant לחילוץ כוונה (intent parsing), ניהול תור "
         "השיחה (action: chat/search/refine/swap), והסברים.",
-        "שיבוצי משפטים (Sentence Embeddings): וקטורים רב-לשוניים בני 384 ממדים, מחושבים מראש "
-        "על תקצירי הסדרות, ללכידת דמיון סמנטי.",
+        "שיבוצי משפטים (Sentence Embeddings): וקטורים רב-לשוניים בני 384 ממדים "
+        "(paraphrase-multilingual-MiniLM-L12-v2, מנורמלי L2), מחושבים מראש על תקצירי "
+        "הסדרות ללכידת דמיון סמנטי. השיבוצים חושבו מחדש לאחר השלמת התקצירים החסרים (ראו "
+        "סעיף 4), כך שגם לסדרות המפורסמות יש כעת ייצוג סמנטי אמיתי.",
         "מדדי דמיון: Jaccard (קבוצות ז'אנר/עשור/שפה), Cosine על וקטורים נומריים, ו-Cosine על "
         "השיבוצים. שולבו למנוע היברידי.",
         "אשכול (Clustering): K-Means לבניית 'פרופילי טעם'.",
@@ -217,8 +222,19 @@ def build():
         "ערכים חסרים: num_seasons מאוכלס ב-75% מהרשומות; השלמה למדיאן בעת בניית מאפיינים.",
         "חישוב מאפיינים מהונדסים: z-scores, decade/decade_str, rating_bucket, binge_fit_score.",
     ])
-    para(doc, "תרשים זרימה (תיאור): מקורות גולמיים ← מיזוג ← הסרת כפילויות ← נרמול ז'אנרים "
-              "← טיפול בחסרים ← הנדסת מאפיינים ← חישוב שיבוצים ← קטלוג סופי (parquet).")
+    para(doc, "השלמת תקצירים (Overview backfill):", bold=True)
+    para(doc, "מניפולציית נתונים מרכזית: ל-2,855 מהרשומות (כ-26%) לא היה תקציר, וביניהן כל "
+              "הסדרות המפורסמות (Breaking Bad, Game of Thrones, The Office ועוד) - כך שהשיבוצים "
+              "הסמנטיים שלהן היו חסרי משמעות. השלמנו את התקצירים החסרים ממקור ה-TMDB שלנו "
+              "(tvs.csv, ~85 אלף תקצירים) בהתאמה לפי שם, ומילאנו 2,302 רשומות. הכיסוי עלה "
+              "מ-74% ל-95%, ואז חושבו השיבוצים מחדש - מה שחיזק ישירות את חיפוש ה'דומה ל-X'.")
+    diagram = os.path.join(HERE, "data_flow.png")
+    if os.path.exists(diagram):
+        pic = doc.add_paragraph()
+        pic.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        pic.add_run().add_picture(diagram, width=Inches(6.2))
+        cap = para(doc, "תרשים 1: צינור עיבוד הנתונים מקצה לקצה (מקורות גולמיים עד הקטלוג והשיבוצים).", size=9)
+        cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
     para(doc, "התפלגות ז'אנרים לפי עשור (% מהכותרים בעשור):", bold=True)
     table_from_df(doc, _csv("genre_share_by_decade.csv"))
     para(doc, "מגמות בולטות (שינוי בנקודות אחוז, 2000s ← 2020s): דרמה ופשע במגמת עלייה; "
@@ -247,18 +263,32 @@ def build():
     table_from_df(doc, _csv("similarity_correlations.csv"))
     para(doc, "המתאם הנמוך בין Jaccard ל-Cosine (0.0736 בתרגיל 2; כ-0.18 בשחזור כאן) מלמד "
               "שהשיטות לוכדות אותות שונים, ולכן שילוב היברידי מצדיק את עצמו עבור 'דומה ל-X'.")
+    para(doc, "שימוש שני במנוע ההיברידי - בורר הזרעים (seed picker): לאחר בחירת הז'אנר, "
+              "המשתמש בוחר עד 3 סדרות מוכרות שהוא אוהב. לכל זרע מורץ המנוע ההיברידי, "
+              "המועמדים ממוזגים לפי ציון ההיברידי המקסימלי, הזרעים מוסרים, ומסנני העידן/"
+              "פופולריות מוחלים (עם הרפיה אם נשארו אפס). כך אותו מנוע משרת גם המלצה לפי טעם "
+              "וגם 'דומה ל-X'.")
     para(doc, "פסאודו-קוד (קצה-לקצה):", bold=True)
     para(doc,
-         "for each user turn:\n"
-         "  intent, action = chat_turn(conversation)        # LLM (Groq)\n"
+         "ONBOARDING:\n"
+         "  if seeds picked -> recommend_from_seeds:\n"
+         "     for each seed: hybrid(Jaccard + Cosine_num + Cosine_text)\n"
+         "     merge candidates by MAX hybrid_score; drop seeds\n"
+         "     apply era/popularity filters (relax to unfiltered if empty)\n"
+         "  else -> rank_by_preferences(answers)\n\n"
+         "rank_by_preferences(answers):\n"
+         "  genre = HARD FLOOR (never relaxed; empty floor -> no-match message)\n"
+         "  apply era > popularity > length; drop the weakest until >=1 survives\n"
+         "  score = 0.6*binge_fit + 0.4*IMDb_weighted_rating; diversity de-dup; top 1..3\n\n"
+         "CHAT (each user turn):\n"
          "  if gibberish -> ask to rephrase\n"
-         "  if off-topic & bridgeable -> action=search with topic keywords\n"
-         "  if action == search/refine:\n"
-         "     if seed title -> hybrid(Jaccard + Cosine_num + Cosine_text) + anomaly gate\n"
-         "     elif keywords -> keyword filter -> quality rank\n"
-         "     else -> rank_by_preferences(catalog)          # weighted ranker\n"
-         "     return top 1..3 cards (catalog-only) + explanation (LLM)\n"
-         "  else: return conversational reply", size=10)
+         "  elif off-topic & bridgeable -> search by topic keywords\n"
+         "       (keep only shows ABOUT the topic: keyword in title OR >=2 keywords)\n"
+         "  elif names a show ('like X') -> FRESH search seeded on X (not a swap)\n"
+         "  else -> chat_turn LLM decides: search | refine | swap_slot | chat\n"
+         "          (blank request -> ask one guiding question)\n"
+         "  search/refine: seed -> hybrid + anomaly gate; else rank_by_preferences\n"
+         "  return top 1..3 cards (catalog-only); fallback offline path if LLM down", size=9)
     para(doc, "דוגמאות תוצאה על מקבץ קטן (פלט דטרמיניסטי של שכבת המנוע):", bold=True)
     para(doc, "פשע/חדש/להיטים ← Scam 1992, Dexter: Resurrection, The Penguin. "
               "קומדיה קצרה ← Goblin, TONIKAWA, Ginny & Georgia. "
@@ -266,15 +296,17 @@ def build():
 
     # 7
     heading(doc, "7. בדיקה ואימות", level=1)
-    para(doc, "המערכת מכוסה בכ-140 בדיקות אוטומטיות (pytest בצד השרת, Vitest בצד הלקוח), "
+    para(doc, "המערכת מכוסה ב-226 בדיקות אוטומטיות (148 pytest בצד השרת, 78 Vitest בצד הלקוח), "
               "כולל בדיקות שמוכיחות שתשובות שונות מניבות המלצות שונות בבירור.")
     para(doc, "שלושה מקרי בדיקה לפחות, כולל מקרה כשל:", bold=True)
     bullets(doc, [
         "מקרה 1: חובב פשע, סדרות חדשות ולהיטים ← שלוש סדרות פשע מ-2020 ואילך בעלות דירוג גבוה.",
-        "מקרה 2: קומדיה קצרה (1-2 עונות) ← קומדיות קצרות ואיכותיות.",
+        "מקרה 2: בורר זרעים - Breaking Bad + Better Call Saul ← שכנים מז'אנר פשע/דרמה "
+        "(Bosch, Ezel, Peaky Blinders), כשהזרעים עצמם מוסרים מהתוצאות.",
         "מקרה 3: פנינה נסתרת בז'אנר מד\"ב ← כותרים מדורגים גבוה עם מעט הצבעות.",
-        "מקרה כשל: בקשה שאין לה התאמה בקטלוג ← המערכת מחזירה הודעה חיננית "
-        "('לא נמצאו המלצות, נסה לנסח מחדש') ואינה ממציאה כותר.",
+        "מקרה כשל (בדוק ביחידת בדיקה): בקשה לסדרות דומות לזרע שאינו קיים בקטלוג ← המנוע "
+        "מחזיר רשימה ריקה והשרת מחזיר הודעה חיננית ('לא נמצאו המלצות'), בלי לקרוס ובלי "
+        "להמציא כותר (test_seeds.py).",
         "ג'יבריש (הקשה אקראית) ← בקשה מנומסת לנסח מחדש.",
     ])
 
@@ -303,6 +335,8 @@ def build():
         "הקטלוג סטטי (snapshot) ואינו מתעדכן בזמן אמת.",
         "כיסוי עברי דל בקטלוג מגביל המלצות לתוכן ישראלי.",
         "אין חישוב שיבוצים בזמן ריצה (אילוץ משאבים), ולכן ה'גישור' מבוסס מילות מפתח.",
+        "כ-5% מהתקצירים עדיין חסרים לאחר ההשלמה (סדרות חדשות מאוד שאינן בתמונת המצב של "
+        "tvs.csv); עבורן השיבוץ מתבסס על הכותרת.",
         "תלות ב-Groq free tier (מגבלות קצב) ובשירות TMDB להעשרה (פוסטרים, טריילרים).",
     ])
 

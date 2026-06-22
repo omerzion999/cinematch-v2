@@ -88,6 +88,24 @@ def test_api_recommend_with_seeds_excludes_seeds(client):
     assert "Breaking Bad" not in titles and "Better Call Saul" not in titles
 
 
+def test_api_recommend_unknown_seed_is_graceful(client):
+    """Failure case (rubric section 7): a seed that does not exist in the catalog
+    yields no matches, and the API returns a graceful message with an empty list,
+    never a crash or an invented title."""
+    resp = client.post(
+        "/api/recommend",
+        json={
+            "answers": {"genre": "crime", "era": "any", "popularity": "any"},
+            "seeds": ["a show that absolutely does not exist 99999"],
+            "lang": "en",
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["recommendations"] == []
+    assert body["intro"]  # a graceful no-match message, not empty
+
+
 def test_api_recommend_without_seeds_uses_preference_ranker(client):
     resp = client.post(
         "/api/recommend",
