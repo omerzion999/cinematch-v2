@@ -38,8 +38,9 @@ def test_recommend_hebrew_uses_hebrew_strings(client):
         "/api/recommend", json={"answers": {"genre": "comedy"}, "lang": "he"}
     )
     body = response.json()
-    assert "תתחבר" in body["intro"]
-    assert "אהבת" in body["outro"]
+    # Short Hebrew intro/outro (RTL). intro embeds the taste label, outro invites more.
+    assert "המלצות" in body["intro"]
+    assert "עוד" in body["outro"]
 
 
 def test_recommend_invalid_answer_value_returns_422(client):

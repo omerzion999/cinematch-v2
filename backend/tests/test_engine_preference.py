@@ -80,6 +80,20 @@ def test_genre_is_a_floor_not_just_a_bonus(catalog_with_features):
         assert all(label in genres for genres in picks["genres"])
 
 
+def test_impossible_combo_relaxes_length_not_genre(catalog_with_features):
+    # Drama + Long(6+) + New(2020+) + Big-hits is near-impossible (a 2020+ show
+    # cannot have 6 seasons yet). The engine must keep GENRE (and ideally era +
+    # popularity) and drop the brittle length rule, never returning kids animation.
+    picks = rank_by_preferences(
+        catalog_with_features,
+        _ans(genre="drama", length="long", era="recent", popularity="well_known"),
+        top_n=3,
+    )
+    assert 1 <= len(picks) <= 3
+    assert all("Drama" in g for g in picks["genres"])      # genre floor held
+    assert not any("Kids" in g for g in picks["genres"])   # no Trolls/Gabby's junk
+
+
 def test_combined_genre_and_era(catalog_with_features):
     picks = rank_by_preferences(
         catalog_with_features, _ans(genre="drama", era="recent"), top_n=3

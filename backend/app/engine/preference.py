@@ -52,11 +52,6 @@ _RATING_FILL = 6.5  # neutral fill so a missing rating does not zero a good bing
 _VOTE_PRIOR = 1000.0
 
 
-# Soft filters relax when fewer than this many titles survive.
-def _min_pool(top_n: int) -> int:
-    return max(top_n, 5)
-
-
 def _target_genre_cols(answers: dict) -> list[str]:
     """Genre feature columns to reward, from the genre answer and/or chat tone."""
     cols: list[str] = []
@@ -71,25 +66,24 @@ def _target_genre_cols(answers: dict) -> list[str]:
     return cols
 
 
-def _apply_era(pool: pd.DataFrame, era: str) -> pd.DataFrame:
+def _era_mask(pool: pd.DataFrame, era: str) -> pd.Series | None:
     bounds = ERA_BOUNDS.get(era)
     if not bounds:
-        return pool
+        return None
     lo, hi = bounds
     year = pool["start_year"]
-    out = pool
+    mask = pd.Series(True, index=pool.index)
     if lo is not None:
-        out = out[year.fillna(-1) >= lo]
+        mask &= year.fillna(-1) >= lo
     if hi is not None:
-        out = out[year.fillna(99999) <= hi]
-    # Era is a hard intent, but never strand the user with nothing.
-    return out if not out.empty else pool
+        mask &= year.fillna(99999) <= hi
+    return mask
 
 
-def _apply_length(pool: pd.DataFrame, length: str, top_n: int) -> pd.DataFrame:
+def _length_mask(pool: pd.DataFrame, length: str) -> pd.Series | None:
     bounds = LENGTH_BOUNDS.get(length)
     if not bounds:
-        return pool
+        return None
     lo, hi = bounds
     seasons = pd.to_numeric(pool["num_seasons"], errors="coerce")
     mask = pd.Series(True, index=pool.index)
@@ -97,20 +91,17 @@ def _apply_length(pool: pd.DataFrame, length: str, top_n: int) -> pd.DataFrame:
         mask &= seasons >= lo
     if hi is not None:
         mask &= seasons <= hi
-    filtered = pool[mask]
-    return filtered if len(filtered) >= _min_pool(top_n) else pool
+    return mask
 
 
-def _apply_popularity(pool: pd.DataFrame, popularity: str, top_n: int) -> pd.DataFrame:
+def _popularity_mask(pool: pd.DataFrame, popularity: str) -> pd.Series | None:
     votes = pool["votes"].fillna(0)
     rating = pool["rating"].fillna(0)
     if popularity == "well_known":
-        filtered = pool[votes > 100000]
-    elif popularity == "hidden_gem":
-        filtered = pool[(votes < 10000) & (rating > 7.5)]
-    else:
-        return pool
-    return filtered if len(filtered) >= _min_pool(top_n) else pool
+        return votes > 100000
+    if popularity == "hidden_gem":
+        return (votes < 10000) & (rating > 7.5)
+    return None
 
 
 def _quality(pool: pd.DataFrame) -> np.ndarray:
@@ -178,21 +169,45 @@ def rank_by_preferences(
     if pool.empty:
         return pool.head(0).reset_index(drop=True)
 
-    pool = _apply_era(pool, answers.get("era", "any"))
-    pool = _apply_length(pool, answers.get("length", "any"), top_n)
-    pool = _apply_popularity(pool, answers.get("popularity", "any"), top_n)
-
-    # Genre is a FLOOR, not just a bonus: when the user names a genre we only
-    # recommend titles that actually have it, so picks are truly on-genre. If the
-    # genre is absent under the other constraints we relax (so we never strand the
-    # user with nothing).
+    # GENRE is a hard FLOOR, never relaxed: when the user names a genre we only
+    # recommend titles that actually have it. If the genre yields nothing at all,
+    # that is a true no-match (caller shows the graceful message).
     genre_cols = [c for c in _target_genre_cols(answers) if c in pool.columns]
     if genre_cols:
         on_genre = pool[pool[genre_cols].max(axis=1) > 0]
-        if not on_genre.empty:
-            pool = on_genre
+        if on_genre.empty:
+            return pool.head(0).reset_index(drop=True)
+        pool = on_genre
 
-    ranked = pool.assign(_score=_quality(pool)).sort_values(
+    # Remaining constraints in priority order (era > popularity > length). Length
+    # is weakest and dropped FIRST: num_seasons is only ~75% populated and "6+
+    # seasons" conflicts with "recent", so it must never strand the user with
+    # off-genre filler. Apply all; if that empties, drop the weakest until >= 1
+    # survives, keeping the most-constrained set that still matches (dynamic 1-3).
+    constraints = []
+    era_mask = _era_mask(pool, answers.get("era", "any"))
+    if era_mask is not None:
+        constraints.append(era_mask)
+    pop_mask = _popularity_mask(pool, answers.get("popularity", "any"))
+    if pop_mask is not None:
+        constraints.append(pop_mask)
+    length_mask = _length_mask(pool, answers.get("length", "any"))
+    if length_mask is not None:
+        constraints.append(length_mask)
+
+    survivors = pool
+    active = list(constraints)
+    while active:
+        combined = pd.Series(True, index=pool.index)
+        for m in active:
+            combined &= m
+        cand = pool[combined]
+        if not cand.empty:
+            survivors = cand
+            break
+        active = active[:-1]  # drop the weakest (length, then popularity, then era)
+
+    ranked = survivors.assign(_score=_quality(survivors)).sort_values(
         ["_score", "rating"], ascending=[False, False], na_position="last"
     )
     return _diverse_top_n(ranked, top_n).drop(columns="_score").reset_index(drop=True)

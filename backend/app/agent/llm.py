@@ -129,9 +129,9 @@ def _call_llm(
     system: str, user: str, max_tokens: int = 600, *,
     model: Optional[str] = None, temperature: Optional[float] = None,
 ) -> Optional[str]:
-    # Groq path: retry up to 3 times with a 5-second per-attempt timeout.
-    # Total worst-case still ~15 seconds, but transient slowness on the first
-    # attempt now gets two more chances instead of immediately falling back.
+    # Groq path: retry up to 3 times with an 8-second per-attempt timeout.
+    # Render's free-tier egress can be slow on a cold start, so 5s was sometimes
+    # tripping even on healthy calls; 8s is more forgiving while staying snappy.
     # On non-timeout errors (auth, malformed request), we break early since
     # those won't fix themselves with retries.
     if _provider == "groq":
@@ -144,7 +144,7 @@ def _call_llm(
                         {"role": "system", "content": system},
                         {"role": "user", "content": user},
                     ],
-                    timeout=5,
+                    timeout=8,
                 )
                 if temperature is not None:
                     kwargs["temperature"] = temperature
@@ -753,6 +753,12 @@ EXAMPLES OF THE DESIRED FEEL
 User: "hi"
 {"action":"chat","reply":"Hey, what are you in the mood for?","intent":{"seeds":[],"mood":[],"length_pref":"any","exclude_genres":[],"lang":"en","free_text":"greeting"}}
 
+User: "i am an israeli"
+{"action":"chat","reply":"Nice! Want Israeli series, or a genre you're into?","intent":{"seeds":[],"mood":[],"length_pref":"any","exclude_genres":[],"lang":"en","language_pref":"any","free_text":"user shared they are Israeli, lead to a recommendation"}}
+
+User: "i'm so tired today"
+{"action":"chat","reply":"Then something easy and fun? Comedy, or a cozy feel-good show?","intent":{"seeds":[],"mood":[],"length_pref":"any","exclude_genres":[],"lang":"en","free_text":"statement, lead to a recommendation"}}
+
 User: "i want a pasta recipe"
 {"action":"chat","reply":"Not my thing, I do TV and movies. Want something to watch while you cook?","intent":{"seeds":[],"mood":[],"length_pref":"any","exclude_genres":[],"lang":"en","free_text":"asked for a pasta recipe, redirected"}}
 
@@ -848,6 +854,87 @@ _SERIES_RE = re.compile(r"\b(series|show|episode|season|סדרה|עונה|פרק
 _ISRAELI_RE = re.compile(
     r"israeli|ישראל|ישראלי|ישראליות|ישראלית|סדרות ישראליות|תוכן ישראלי", re.IGNORECASE
 )
+
+# Signals used by the offline fallback (no-LLM / LLM-failure path) to decide
+# whether a message is actually a recommendation request.
+_GREETING_RE = re.compile(
+    r"^\s*(hi|hello|hey|yo|howdy|sup|good\s+(morning|evening|afternoon))\b"
+    r"|שלום|היי|היי|מה\s+(נשמע|קורה|המצב|העניינים)",
+    re.IGNORECASE,
+)
+_REQUEST_VERB_RE = re.compile(
+    r"\b(recommend|recommendation|suggest|watch|find|show me|looking for|give me|"
+    r"what should i watch|something to watch)\b"
+    r"|תמליצ|תמליץ|המלצ|לראות|תביא|מחפש|בא לי|תן לי|מה לראות",
+    re.IGNORECASE,
+)
+_GENRE_SIGNAL_RE = re.compile(
+    r"\b(drama|comedy|comedies|sitcom|crime|thriller|horror|scary|sci-?fi|fantasy|"
+    r"animation|anime|documentary|docu|romance|romantic|action|adventure|mystery)\b"
+    r"|דרמה|קומדיה|סיטקום|פשע|מותחן|אימה|מפחיד|מדע\s*בדיוני|פנטזיה|אנימציה|דוקו|"
+    r"רומנט|אקשן|הרפתק|מתח|תעלומ",
+    re.IGNORECASE,
+)
+
+
+def _offline_chat(reply: str, lang: str, fallback: dict) -> dict:
+    return {
+        "action": "chat",
+        "intent": {**fallback, "lang": lang, "language_pref": "any"},
+        "reply": reply,
+        "follow_up": "",
+    }
+
+
+def _offline_turn(last_user: str, lang: str, fallback: dict) -> dict:
+    """
+    Decide what to do WITHOUT the LLM (no key, or the LLM call failed). Only run a
+    search when there is a real recommendation signal; otherwise reply
+    conversationally and steer toward a recommendation, so chitchat like
+    "i am an israeli" never dumps random picks. Gibberish, bridge, and movie
+    redirects are already handled before this is reached.
+    """
+    he = lang == "he"
+    m = (last_user or "").strip()
+
+    has_signal = bool(
+        fallback.get("mood")
+        or fallback.get("seeds")
+        or _GENRE_SIGNAL_RE.search(m)
+        or _REQUEST_VERB_RE.search(m)
+    )
+    if has_signal:
+        return {
+            "action": "search",
+            "intent": {**fallback, "lang": lang, "language_pref": "any"},
+            "reply": "",
+            "follow_up": "",
+        }
+
+    if any(tok in m.lower() for tok in _CHAT_TOKENS):
+        return _offline_chat(
+            "בכיף! רוצה עוד המלצה?" if he else "Anytime. Want another pick?", lang, fallback
+        )
+    if _GREETING_RE.search(m):
+        return _offline_chat(
+            "היי! אני CineMatch, ממליץ על סדרות. מה בא לך לראות, ז'אנר או אווירה?"
+            if he else
+            "Hey! I'm CineMatch, I recommend TV series. What are you in the mood for, a genre or a vibe?",
+            lang, fallback,
+        )
+    if _ISRAELI_RE.search(m):
+        return _offline_chat(
+            "מגניב! רוצה סדרות ישראליות, או שיש ז'אנר שבא לך?"
+            if he else
+            "Cool. Want Israeli series, or is there a genre you're after?",
+            lang, fallback,
+        )
+    return _offline_chat(
+        "אני ממליץ על סדרות טלוויזיה. ספר לי ז'אנר או אווירה ואמצא לך משהו."
+        if he else
+        "I recommend TV series. Tell me a genre or a vibe and I'll find you something.",
+        lang, fallback,
+    )
 
 
 def _conversation_lang(conversation: list[dict], ui_lang: str) -> str:
@@ -979,7 +1066,7 @@ def chat_turn(
 
     # ── No LLM available ──────────────────────────────────────────────────────
     if _provider is None:
-        return {"action": "search", "intent": fallback, "reply": "", "follow_up": ""}
+        return _offline_turn(last_user, detected_lang, fallback)
 
     # ── Build context for the LLM ─────────────────────────────────────────────
     recs_ctx = ""
@@ -1077,18 +1164,11 @@ def chat_turn(
         except Exception:
             pass
 
-    # LLM call failed (Groq timeout, rate limit, or invalid JSON).
-    # Always fall back to a real search rather than a confusing "hiccup" message:
-    # if regex captured mood/seeds we use them, otherwise an empty intent which
-    # the weighted ranker turns into strong general-quality picks. The user sees
-    # real recommendations instead of an error.
-    fallback["lang"] = detected_lang
-    fallback["language_pref"] = "any"
-    reply = "" if (fallback.get("mood") or fallback.get("seeds")) else (
-        "Here are a few you might enjoy:" if detected_lang == "en"
-        else "הנה כמה שאולי יתאימו לך:"
-    )
-    return {"action": "search", "intent": fallback, "reply": reply, "follow_up": ""}
+    # LLM call failed (Groq timeout, rate limit, or invalid JSON). Use the same
+    # offline decision as the no-key path: search only on a real signal, else a
+    # short conversational reply that steers toward a recommendation. This keeps
+    # the agent sane even when Groq is down or rate-limited (e.g. mid-demo).
+    return _offline_turn(last_user, detected_lang, fallback)
 
 
 def _fallback_explanation(intent: dict, recommendations: list[dict], lang: str) -> str:

@@ -8,12 +8,12 @@ intro/outro and a couple of fallback/error strings.
 
 STRINGS: dict[str, dict[str, str]] = {
     "recommend_intro": {
-        "he": "על סמך מה שסיפרת לי, אני חושב שתתחבר לטעם הזה: {label}. הנה כמה סדרות שכדאי לבדוק:",
-        "en": "Based on what you told me, I think you're into: {label}. Here are a few shows worth checking out:",
+        "he": "הנה כמה המלצות בכיוון {label}:",
+        "en": "A few {label} picks for you:",
     },
     "recommend_outro": {
-        "he": "מקווה שאהבת את ההמלצות! אפשר להמשיך לדבר איתי על סדרות, לבקש עוד המלצות, או לשאול אותי כל דבר.",
-        "en": "Hope you like these picks! Feel free to keep chatting, ask for more recommendations, or anything else.",
+        "he": "רוצה עוד? פשוט תכתוב לי.",
+        "en": "Want more? Just say the word.",
     },
     "no_recommendations": {
         "he": "לא הצלחתי למצוא המלצות מתאימות הפעם. אפשר לנסות עם תשובות אחרות?",
