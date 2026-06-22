@@ -51,8 +51,6 @@ _RATING_FILL = 6.5  # neutral fill so a missing rating does not zero a good bing
 # shrunk toward the mean, so a 9.9 with 8 votes does not beat an 8.7 with 50k.
 _VOTE_PRIOR = 1000.0
 
-_W_GENRE = 0.6
-_W_QUALITY = 0.4
 
 # Soft filters relax when fewer than this many titles survive.
 def _min_pool(top_n: int) -> int:
@@ -184,16 +182,17 @@ def rank_by_preferences(
     pool = _apply_length(pool, answers.get("length", "any"), top_n)
     pool = _apply_popularity(pool, answers.get("popularity", "any"), top_n)
 
-    quality = _quality(pool)
+    # Genre is a FLOOR, not just a bonus: when the user names a genre we only
+    # recommend titles that actually have it, so picks are truly on-genre. If the
+    # genre is absent under the other constraints we relax (so we never strand the
+    # user with nothing).
     genre_cols = [c for c in _target_genre_cols(answers) if c in pool.columns]
     if genre_cols:
-        genre_match = pool[genre_cols].max(axis=1).to_numpy(dtype=float)
-        score = _W_GENRE * genre_match + _W_QUALITY * quality
-    else:
-        score = quality
+        on_genre = pool[pool[genre_cols].max(axis=1) > 0]
+        if not on_genre.empty:
+            pool = on_genre
 
-    ranked = pool.assign(_score=score).sort_values(
+    ranked = pool.assign(_score=_quality(pool)).sort_values(
         ["_score", "rating"], ascending=[False, False], na_position="last"
     )
-    result = _diverse_top_n(ranked, top_n).drop(columns="_score")
-    return result.reset_index(drop=True)
+    return _diverse_top_n(ranked, top_n).drop(columns="_score").reset_index(drop=True)

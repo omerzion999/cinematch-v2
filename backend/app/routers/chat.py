@@ -6,7 +6,7 @@ import pandas as pd
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from app.agent.llm import chat_turn, explain_recommendations
+from app.agent.llm import chat_turn
 from app.catalog_lookup import find_catalog_index
 from app.clustering.onboarding_map import intent_to_onboarding_answers
 from app.engine.anomaly import is_anomalous
@@ -93,19 +93,35 @@ def _seed_based_picks(state, seed_title, lang, exclude_titles, top_n=3, filters=
 _ANY_ANSWERS = {"genre": "any", "length": "any", "era": "any", "popularity": "any"}
 
 
-def _keyword_picks(state, keywords, exclude_titles, top_n=3):
-    """Bridge search: catalog shows whose title/overview mention the topic
-    keywords, ranked by the same quality blend as the preference ranker."""
+def _keyword_picks(state, keywords, preferred_genres, exclude_titles, top_n=3):
+    """Bridge search: catalog shows about the topic, ranked by the same quality
+    blend as the preference ranker. Two stages keep results on-topic:
+      1. keep titles whose overview/title mention a topic keyword;
+      2. of those, keep only ones whose GENRE is a topic genre OR whose TITLE
+         contains a keyword. Step 2 drops shows that merely mention a keyword in
+         passing (e.g. Daredevil's "Hell's Kitchen"). Falls back to step 1 if
+         step 2 is empty, so the bridge still offers something."""
     catalog = state["catalog_with_features"]
     # Word-boundary match so topic keywords do not hit substrings of unrelated
     # words ("world" inside "Westworld", "rock" inside "Rocket").
-    pattern = "|".join(rf"\b{re.escape(k)}\b" for k in keywords if k)
-    if not pattern:
+    kw_pattern = "|".join(rf"\b{re.escape(k)}\b" for k in keywords if k)
+    if not kw_pattern:
         return catalog.head(0)
-    text = catalog["overview"].fillna("") + " " + catalog["title"].fillna("")
-    pool = catalog[text.str.contains(pattern, case=False, na=False, regex=True)]
+
+    title = catalog["title"].fillna("")
+    text = catalog["overview"].fillna("") + " " + title
+    pool = catalog[text.str.contains(kw_pattern, case=False, na=False, regex=True)]
     if pool.empty:
         return pool
+
+    genres = pool["genres"].fillna("")
+    genre_pattern = "|".join(re.escape(g) for g in (preferred_genres or []))
+    on_genre = genres.str.contains(genre_pattern, case=False, na=False) if genre_pattern else False
+    in_title = pool["title"].fillna("").str.contains(kw_pattern, case=False, na=False, regex=True)
+    relevant = pool[on_genre | in_title]
+    if not relevant.empty:
+        pool = relevant
+
     return rank_by_preferences(pool, _ANY_ANSWERS, top_n=top_n, exclude_titles=exclude_titles)
 
 
@@ -147,7 +163,9 @@ def _picks_for_intent(state, intent, lang, exclude_titles, top_n=3, prev_recs=No
 
     keywords = intent.get("keywords") or []
     if keywords:
-        picks = _keyword_picks(state, keywords, exclude_titles, top_n)
+        picks = _keyword_picks(
+            state, keywords, intent.get("bridge_genres") or [], exclude_titles, top_n
+        )
         if not picks.empty:
             return picks
 
@@ -195,6 +213,8 @@ def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     if picks.empty:
         return ChatResponse(reply=t("not_in_catalog", payload.lang))
 
+    # Keep answers short: the one-line reply plus the cards are enough. We do not
+    # attach a long explanation bubble (it tended to ramble and even critique its
+    # own picks). Per-show context lives in the card modal.
     cards = _to_rec_cards(picks)
-    explanation = explain_recommendations(intent, picks.to_dict(orient="records"), payload.lang)
-    return ChatResponse(reply=result["reply"], recommendations=cards, explanation=explanation)
+    return ChatResponse(reply=result["reply"], recommendations=cards)

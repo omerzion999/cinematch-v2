@@ -31,7 +31,7 @@ def test_chat_action_chat_returns_reply_without_recommendations(client, monkeypa
     assert body["recommendations"] is None
 
 
-def test_chat_search_returns_recommendations_and_explanation(client, monkeypatch):
+def test_chat_search_returns_short_reply_and_dynamic_recommendations(client, monkeypatch):
     monkeypatch.setattr(
         chat_module,
         "chat_turn",
@@ -52,8 +52,10 @@ def test_chat_search_returns_recommendations_and_explanation(client, monkeypatch
     )
     assert response.status_code == 200
     body = response.json()
+    # Dynamic 1-3 picks, a short one-line reply, and NO long explanation bubble.
     assert 1 <= len(body["recommendations"]) <= 3
-    assert body["explanation"]
+    assert body["reply"] == "Try these:"
+    assert body["explanation"] is None
 
 
 def test_chat_refine_excludes_previously_shown_titles(client, monkeypatch):
