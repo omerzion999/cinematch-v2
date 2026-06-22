@@ -76,15 +76,34 @@ def test_fuzzy_lookup_unknown_returns_none(catalog):
     assert find_catalog_index(catalog, "zzzz nonexistent show qqqq") is None
 
 
-# ── No-hiccup fallback ────────────────────────────────────────────────────────
+# ── Offline fallback (no LLM / LLM failure): smart, not a rec-dump ────────────
 
-def test_chat_turn_llm_failure_falls_back_to_search(monkeypatch):
+def _force_llm_failure(monkeypatch):
     monkeypatch.setattr(llm, "_get_client", lambda: True)
     monkeypatch.setattr(llm, "_provider", "groq")
     monkeypatch.setattr(llm, "_call_llm", lambda *a, **k: None)  # simulate failure
+
+
+def test_offline_greeting_is_conversational_not_a_rec_dump(monkeypatch):
+    _force_llm_failure(monkeypatch)
     result = llm.chat_turn([{"role": "user", "content": "hey there"}], lang="en")
-    assert result["action"] == "search"  # never the old "brain hiccup" chat message
+    assert result["action"] == "chat"          # greeting -> converse, do NOT dump recs
+    assert result["reply"]
     assert "hiccup" not in result["reply"].lower()
+
+
+def test_offline_statement_leads_to_recommendation(monkeypatch):
+    _force_llm_failure(monkeypatch)
+    result = llm.chat_turn([{"role": "user", "content": "i am an israeli"}], lang="en")
+    assert result["action"] == "chat"          # a statement is not a search request
+    assert result["reply"]
+
+
+def test_offline_real_signal_still_searches(monkeypatch):
+    _force_llm_failure(monkeypatch)
+    for msg in ["recommend a good drama", "something funny", "i want a thriller"]:
+        result = llm.chat_turn([{"role": "user", "content": msg}], lang="en")
+        assert result["action"] == "search", msg
 
 
 # ── Hebrew explainer goes through the LLM ─────────────────────────────────────
