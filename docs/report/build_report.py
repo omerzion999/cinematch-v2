@@ -121,15 +121,24 @@ def build():
     rs.font.size = Pt(18)
     _rtl_run(rs)
     sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    for _ in range(8):
+    for _ in range(4):
         doc.add_paragraph()
     for line in ["מגישים: תומר בלונד, עומר ציון",
-                 "פרויקט גמר - סדנת חדשנות מבוססת AI ו-ML",
+                 "סדנת חדשנות מבוססת AI ו-ML (277302)",
+                 'ד"ר ליהי רייקלסון · האקדמית תל-אביב-יפו',
                  "יוני 2026"]:
         p = doc.add_paragraph()
         rr = p.add_run(line)
         rr.font.size = Pt(13)
         _rtl_run(rr)
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    doc.add_paragraph()
+    for link in ["Live app:  https://cinematch-ai-v2.onrender.com/",
+                 "GitHub:  https://github.com/omerzion999/cinematch-v2"]:
+        p = doc.add_paragraph()
+        rr = p.add_run(link)
+        rr.font.size = Pt(11)
+        rr.font.color.rgb = DARK
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     doc.add_page_break()
@@ -189,22 +198,22 @@ def build():
 
     # 3
     heading(doc, "3. עומק טכני AI (NLP/LLM)", level=1)
-    para(doc, "מושגים וטכנולוגיות בהם השתמשנו:", bold=True)
+    para(doc, "המושגים שנלמדו בכיתה ויישומם הישיר בפרויקט:", bold=True)
     bullets(doc, [
-        "מודל שפה (LLM): Groq llama-3.1-8b-instant לחילוץ כוונה (intent parsing), ניהול תור "
-        "השיחה (action: chat/search/refine/swap), והסברים.",
-        "שיבוצי משפטים (Sentence Embeddings): וקטורים רב-לשוניים בני 384 ממדים "
-        "(paraphrase-multilingual-MiniLM-L12-v2, מנורמלי L2), מחושבים מראש על תקצירי "
-        "הסדרות ללכידת דמיון סמנטי. השיבוצים חושבו מחדש לאחר השלמת התקצירים החסרים (ראו "
-        "סעיף 4), כך שגם לסדרות המפורסמות יש כעת ייצוג סמנטי אמיתי.",
-        "מדדי דמיון: Jaccard (קבוצות ז'אנר/עשור/שפה), Cosine על וקטורים נומריים, ו-Cosine על "
-        "השיבוצים. שולבו למנוע היברידי.",
-        "אשכול (Clustering): K-Means לבניית 'פרופילי טעם'.",
+        "דמיון טקסט (Text similarity, שבוע 5): מדדי Jaccard (קבוצות ז'אנר/עשור/שפה) ו-Cosine "
+        "(על וקטורים נומריים) - שני המדדים שולבו למנוע ההיברידי.",
+        "שיבוצי מילים ומשפטים (Word Embedding ו-NLP, שבועות 9-11): וקטורים רב-לשוניים בני 384 "
+        "ממדים (paraphrase-multilingual-MiniLM-L12-v2, מנורמלי L2) על תקצירי הסדרות, ו-Cosine "
+        "עליהם ללכידת דמיון סמנטי. השיבוצים חושבו מחדש לאחר השלמת התקצירים החסרים (סעיף 4).",
+        "אשכול (Clustering, שבוע 4): K-Means לבניית 'פרופילי טעם'; נשמר כהשוואת מודל (סעיף 5-6).",
+        "סוכני LLM ו-Generative AI (LLM Agents שבוע 8, ChatGPT שבועות 6-7): Groq "
+        "llama-3.1-8b-instant לחילוץ כוונה (intent parsing), ניהול תור השיחה "
+        "(chat/search/refine/swap) והסברים בשפה טבעית.",
         "זיהוי חריגות (Anomaly detection): סף מכויל לזיהוי מצב 'אין התאמה טובה'.",
     ])
-    para(doc, "מה עשינו על הנתונים שלנו: הנדסת מאפיינים (z-scores לדירוג/הצבעות/שנה/פופולריות, "
-              "ניקוד binge_fit_score, חלוקה ל-rating_bucket ול-decade), וחישוב שיבוצים סמנטיים "
-              "על התקצירים.")
+    para(doc, "מה עשינו על הנתונים שלנו בהקשר זה: הנדסת מאפיינים (z-scores לדירוג/הצבעות/שנה/"
+              "פופולריות, ניקוד binge_fit_score, חלוקה ל-rating_bucket ול-decade), השלמת תקצירים "
+              "חסרים וחישוב שיבוצים סמנטיים על התקצירים (raw text -> 384-dim vector).")
 
     # 4
     heading(doc, "4. הנתונים (Big Data): מקורות, איסוף, ניקוי והכנה", level=1)
@@ -289,10 +298,13 @@ def build():
          "          (blank request -> ask one guiding question)\n"
          "  search/refine: seed -> hybrid + anomaly gate; else rank_by_preferences\n"
          "  return top 1..3 cards (catalog-only); fallback offline path if LLM down", size=9)
-    para(doc, "דוגמאות תוצאה על מקבץ קטן (פלט דטרמיניסטי של שכבת המנוע):", bold=True)
-    para(doc, "פשע/חדש/להיטים ← Scam 1992, Dexter: Resurrection, The Penguin. "
-              "קומדיה קצרה ← Goblin, TONIKAWA, Ginny & Georgia. "
-              "מד\"ב פנינה נסתרת ← Goblin, High School DxD, Love Alarm.")
+    para(doc, "דוגמאות תוצאה על מקבץ קטן (פלט דטרמיניסטי מאומת של שכבת המנוע):", bold=True)
+    bullets(doc, [
+        "פשע / חדש / להיטים ← Scam 1992, Dexter: Resurrection, The Penguin.",
+        "קומדיה / קלאסי ← The Office, Friends, Freaks and Geeks.",
+        'מד"ב / פנינה נסתרת ← Goblin, High School DxD, Love Alarm.',
+        "זרעים Breaking Bad + Better Call Saul ← Bosch, Ezel, Peaky Blinders (הזרעים מוסרים).",
+    ])
 
     # 7
     heading(doc, "7. בדיקה ואימות", level=1)
@@ -304,6 +316,11 @@ def build():
         "מקרה 2: בורר זרעים - Breaking Bad + Better Call Saul ← שכנים מז'אנר פשע/דרמה "
         "(Bosch, Ezel, Peaky Blinders), כשהזרעים עצמם מוסרים מהתוצאות.",
         "מקרה 3: פנינה נסתרת בז'אנר מד\"ב ← כותרים מדורגים גבוה עם מעט הצבעות.",
+        "מקרה 4 (שיחה): 'תמליץ על סדרה כמו The Office' ← חיפוש חדש מבוסס-זרע "
+        "(It's Always Sunny, Parks and Recreation, The IT Crowd), ולא החלפה של המלצות קודמות.",
+        "מקרה 5 (גישור מחוץ לנושא): 'בא לי לבשל פסטה' ← סדרות בישול אמיתיות "
+        "(The Bear, The Great British Baking Show, Chef's Table); סדרות שמזכירות אוכל אגב "
+        "(כמו Queer Eye) מסוננות החוצה.",
         "מקרה כשל (בדוק ביחידת בדיקה): בקשה לסדרות דומות לזרע שאינו קיים בקטלוג ← המנוע "
         "מחזיר רשימה ריקה והשרת מחזיר הודעה חיננית ('לא נמצאו המלצות'), בלי לקרוס ובלי "
         "להמציא כותר (test_seeds.py).",
