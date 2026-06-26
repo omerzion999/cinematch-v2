@@ -187,10 +187,11 @@ def _picks_for_intent(state, intent, lang, exclude_titles, top_n=3, prev_recs=No
         return _language_filtered_picks(state, "he", exclude_titles, top_n, intent_with_genre)
 
     seeds = intent.get("seeds") or []
-    # Only fall back to prev_recs as seed on refinements ("more options", "shorter",
-    # etc.). A fresh search ("i want horror series") must ignore prev_recs so a
-    # completely different genre request doesn't inherit the previous genre's seed.
-    if not seeds and prev_recs and is_refinement:
+    # Use prev_recs as seed ONLY for true refinements that have no new genre/mood
+    # direction ("more options", "shorter", "from 2020"). When the user specifies
+    # a mood (horror, comedy, action…), even with words like "instead" or "actually",
+    # that is a fresh direction — ignore prev_recs so the genre filter works cleanly.
+    if not seeds and prev_recs and is_refinement and not mood_genres:
         seeds = [prev_recs[0]["title"]]
     if seeds:
         picks = _seed_based_picks(state, seeds[0], lang, exclude_titles, top_n, filters=intent)
