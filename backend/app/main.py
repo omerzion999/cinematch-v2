@@ -8,7 +8,8 @@ from fastapi.staticfiles import StaticFiles
 from app.routers import chat, recommend, seeds, show, translate
 from app.state import load_state
 
-load_dotenv()
+_ENV_FILE = os.path.join(os.path.dirname(__file__), "..", ".env")
+load_dotenv(_ENV_FILE)
 
 FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
 
