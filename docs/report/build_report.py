@@ -81,27 +81,83 @@ def add_internal_hyperlink(paragraph, anchor, text, size=11):
 
 # ── RTL helpers ───────────────────────────────────────────────────────────────
 
+def _style_rtl(style):
+    """Mark a Word paragraph style as RTL (bidi paragraph + rtl runs). Microsoft
+    Word resolves direction from the STYLE before docDefaults, so this is the piece
+    that makes Word (not just LibreOffice) render the document right-to-left."""
+    pPr = style.element.get_or_add_pPr()
+    if pPr.find(qn("w:bidi")) is None:
+        pPr.append(OxmlElement("w:bidi"))
+    rPr = style.element.get_or_add_rPr()
+    if rPr.find(qn("w:rtl")) is None:
+        rPr.append(OxmlElement("w:rtl"))
+
+
 def set_document_rtl(doc):
-    """Make the whole document NATIVELY right-to-left (like a Hebrew doc authored
-    in Word): set each section direction to RTL and the document default paragraph
-    direction to bidi. English/numeric table cells override this back to LTR so
-    their columns still read in logical order."""
+    """Make the whole document NATIVELY right-to-left in BOTH Word and LibreOffice:
+    set each section direction to RTL, the document defaults to bidi+rtl, AND the
+    paragraph STYLES (Normal + Headings) to bidi+rtl (Word reads the style first).
+    English/numeric table cells override this back to LTR so their columns still
+    read in logical order."""
     for section in doc.sections:
         sectPr = section._sectPr
         if sectPr.find(qn("w:bidi")) is None:
             sectPr.append(OxmlElement("w:bidi"))
+
     docDefaults = doc.styles.element.find(qn("w:docDefaults"))
     if docDefaults is not None:
         pPrDefault = docDefaults.find(qn("w:pPrDefault"))
         if pPrDefault is None:
-            pPrDefault = OxmlElement("w:pPrDefault")
-            docDefaults.insert(0, pPrDefault)
+            pPrDefault = OxmlElement("w:pPrDefault"); docDefaults.insert(0, pPrDefault)
         pPr = pPrDefault.find(qn("w:pPr"))
         if pPr is None:
-            pPr = OxmlElement("w:pPr")
-            pPrDefault.append(pPr)
+            pPr = OxmlElement("w:pPr"); pPrDefault.append(pPr)
         if pPr.find(qn("w:bidi")) is None:
             pPr.append(OxmlElement("w:bidi"))
+        rPrDefault = docDefaults.find(qn("w:rPrDefault"))
+        if rPrDefault is None:
+            rPrDefault = OxmlElement("w:rPrDefault"); docDefaults.append(rPrDefault)
+        rPr = rPrDefault.find(qn("w:rPr"))
+        if rPr is None:
+            rPr = OxmlElement("w:rPr"); rPrDefault.append(rPr)
+        if rPr.find(qn("w:rtl")) is None:
+            rPr.append(OxmlElement("w:rtl"))
+
+    for style in doc.styles:
+        name = (style.name or "")
+        if name == "Normal" or name.startswith("Heading"):
+            try:
+                _style_rtl(style)
+            except Exception:
+                pass
+
+
+_HEB_RE = __import__("re").compile(r"[֐-׿]")
+_LATIN_SEG_RE = __import__("re").compile(r"([A-Za-z0-9(][A-Za-z0-9 .,()/:_\-]*)")
+
+
+def add_bidi_runs(paragraph, text, size=13, bold=False, color=None):
+    """Add `text` to an RTL paragraph as bidi-correct runs: Hebrew segments become
+    RTL runs (David font), Latin/digit segments become LTR runs. This keeps a mixed
+    Hebrew + Latin + number line (course number, IDs) in the correct logical order
+    instead of letting the RTL base reorder it."""
+    parts = _LATIN_SEG_RE.split(text)
+    for i, seg in enumerate(parts):
+        if not seg:
+            continue
+        run = paragraph.add_run(seg)
+        run.font.size = Pt(size)
+        run.bold = bold
+        if color is not None:
+            run.font.color.rgb = color
+        rPr = run._r.get_or_add_rPr()
+        rtl = OxmlElement("w:rtl")
+        if i % 2 == 1:  # captured Latin/digit segment -> LTR
+            rtl.set(qn("w:val"), "0")
+        else:
+            run.font.name = FONT
+        rPr.append(rtl)
+    return paragraph
 
 
 def _set_ltr(paragraph):
@@ -231,27 +287,25 @@ def build():
     sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
     for _ in range(4):
         doc.add_paragraph()
-    for line in ["מגישים: תומר בלונד, עומר ציון",
-                 "סדנת חדשנות מבוססת AI ו-ML (277302)",
-                 'ד"ר ליהי רייכלסון · האקדמית תל-אביב-יפו',
+    for line in ["מגישים: תומר בלונד (322211103), עומר ציון (322757469)",
+                 "סדנת חדשנות מבוססת AI ו-ML",
+                 'קורס 277302 · ד"ר ליהי רייכלסון · האקדמית תל-אביב-יפו',
                  "יוני 2026"]:
         p = doc.add_paragraph()
-        rr = p.add_run(line)
-        rr.font.size = Pt(13)
-        _rtl_run(rr)
-        # Cover lines mix Hebrew with Latin/numbers; keep an LTR base so the course
-        # number and Latin tokens do not get reordered by the RTL document default.
-        _set_ltr(p)
+        _rtl_paragraph(p)
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        # Native RTL line; Hebrew vs Latin/number split into runs so nothing flips.
+        add_bidi_runs(p, line, size=13)
     doc.add_paragraph()
-    for label, url in [("Live app:  ", "https://cinematch-ai-v2.onrender.com/"),
-                       ("GitHub:  ", "https://github.com/omerzion999/cinematch-v2")]:
+    for label, url in [("אפליקציה חיה: ", "https://cinematch-ai-v2.onrender.com"),
+                       ("קוד מקור (GitHub): ", "https://github.com/omerzion999/cinematch-v2")]:
         p = doc.add_paragraph()
-        _set_ltr(p)
+        _rtl_paragraph(p)
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(label)
-        run.font.size = Pt(11)
-        run.font.color.rgb = DARK
+        lr = p.add_run(label)
+        lr.font.size = Pt(11)
+        lr.font.color.rgb = DARK
+        _rtl_run(lr)
         add_external_hyperlink(p, url, url, size=11)
 
     doc.add_page_break()
