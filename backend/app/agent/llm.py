@@ -454,19 +454,21 @@ _VOWELS = set("aeiouAEIOU")
 
 
 def _is_gibberish(msg: str) -> bool:
-    """Very conservative, low-threshold detector for keyboard-mashing input.
+    """Conservative keyboard-mashing detector. Two paths:
 
-    Only flags a single Latin-alphabet "word" (no spaces) of 6+ letters that
-    contains no vowels at all, e.g. "sjfnkfdsngkjdhf". Real words, acronyms,
-    short input, numbers, punctuation, and Hebrew text are never flagged, so
-    this never blocks a genuine (if terse) request.
+    Latin: a single word of 6+ letters with no vowels (e.g. "sjfnkfds").
+    Hebrew: a single word of 7+ Hebrew-only letters where fewer than half the
+    characters are unique (e.g. "יגכיגיגכ" — 3 distinct / 8 total = 0.375).
+    Real Hebrew words at that length consistently have ≥ 0.5 unique-char ratio.
     """
     text = msg.strip()
     if len(text) < 6 or " " in text or "\n" in text:
         return False
-    if not re.fullmatch(r"[A-Za-z]+", text):
-        return False
-    return not any(c in _VOWELS for c in text)
+    if re.fullmatch(r"[A-Za-z]+", text):
+        return not any(c in _VOWELS for c in text)
+    if re.fullmatch(r"[א-ת]+", text) and len(text) >= 7:
+        return (len(set(text)) / len(text)) < 0.5
+    return False
 
 
 # ── Off-topic bridge map ──────────────────────────────────────────────────────
