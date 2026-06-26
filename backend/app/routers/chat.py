@@ -164,7 +164,7 @@ def _language_filtered_picks(state, language: str, exclude_titles, top_n=3, inte
     return df.sort_values("rating", ascending=False, na_position="last").head(top_n)
 
 
-def _picks_for_intent(state, intent, lang, exclude_titles, top_n=3, prev_recs=None):
+def _picks_for_intent(state, intent, lang, exclude_titles, top_n=3, prev_recs=None, is_refinement=False):
     # Derive a genre filter from mood (thrilling -> Action, funny -> Comedy) for the
     # seedless paths only. We deliberately do NOT apply it to the seed-similarity
     # search below: "something like Breaking Bad" is defined by the SEED, and
@@ -187,7 +187,10 @@ def _picks_for_intent(state, intent, lang, exclude_titles, top_n=3, prev_recs=No
         return _language_filtered_picks(state, "he", exclude_titles, top_n, intent_with_genre)
 
     seeds = intent.get("seeds") or []
-    if not seeds and prev_recs:
+    # Only fall back to prev_recs as seed on refinements ("more options", "shorter",
+    # etc.). A fresh search ("i want horror series") must ignore prev_recs so a
+    # completely different genre request doesn't inherit the previous genre's seed.
+    if not seeds and prev_recs and is_refinement:
         seeds = [prev_recs[0]["title"]]
     if seeds:
         picks = _seed_based_picks(state, seeds[0], lang, exclude_titles, top_n, filters=intent)
@@ -224,7 +227,10 @@ def chat(payload: ChatRequest, request: Request) -> ChatResponse:
         return ChatResponse(reply=result["reply"], recommendations=cards)
 
     # action in ("search", "refine")
-    picks = _picks_for_intent(state, intent, payload.lang, exclude_titles, top_n=3, prev_recs=prev_recs)
+    picks = _picks_for_intent(
+        state, intent, payload.lang, exclude_titles, top_n=3,
+        prev_recs=prev_recs, is_refinement=(action == "refine"),
+    )
     if picks.empty:
         return ChatResponse(reply=t("not_in_catalog", payload.lang))
 
