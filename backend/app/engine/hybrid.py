@@ -10,6 +10,8 @@ Default weights tuned on a 10-pair hand-rated preference set:
   γ = 0.35  (semantic synopsis similarity)
 """
 
+import re
+
 import numpy as np
 import pandas as pd
 from app.catalog_lookup import find_catalog_index
@@ -127,9 +129,11 @@ def apply_filters(catalog: pd.DataFrame, filters: dict) -> pd.DataFrame:
 
     genre_col = "genre_set_str" if "genre_set_str" in df.columns else "genres"
 
-    # include_genres (soft – keep only rows that match at least one genre)
-    for genre in (filters.get("include_genres") or []):
-        tmp = df[df[genre_col].fillna("").str.contains(genre, case=False, na=False)]
+    # include_genres (soft – keep rows matching ANY of the genres, OR logic)
+    include_genres = filters.get("include_genres") or []
+    if include_genres:
+        pattern = "|".join(re.escape(g) for g in include_genres)
+        tmp = df[df[genre_col].fillna("").str.contains(pattern, case=False, na=False, regex=True)]
         if len(tmp) >= 3:
             df = tmp
 

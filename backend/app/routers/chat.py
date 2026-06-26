@@ -148,6 +148,7 @@ def _preference_picks(state, intent, exclude_titles, top_n=3):
 
 _MOOD_TO_GENRE: dict[str, str] = {
     "thrilling": "Action",
+    "horror": "Horror",
     "funny": "Comedy",
     "emotional": "Drama",
 }

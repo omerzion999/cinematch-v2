@@ -215,8 +215,8 @@ def _regex_parse(query: str) -> dict:
         "dark":      ["dark","אפל","כהה","depressing"],
         "funny":     ["funny","comedy","fun","מצחיק","הומור","קומדי","sitcom"],
         "emotional": ["emotional","sad","cry","מרגש","עצוב"],
-        "thrilling": ["thriller","thrill","suspense","מותחן","מפחיד","horror",
-                      "scary","action","אקשן","אימה","crime","פשע","מתח"],
+        "thrilling": ["thriller","thrill","suspense","מותחן","action","אקשן","crime","פשע","מתח"],
+        "horror":    ["horror","scary","מפחיד","אימה","zombie","gore","supernatural"],
         "light":     ["light","lighthearted","קליל","קל","cheerful"],
     }
     mood = []
