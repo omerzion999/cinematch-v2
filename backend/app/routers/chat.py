@@ -137,8 +137,18 @@ def _preference_picks(state, intent, exclude_titles, top_n=3):
     """Seedless personalization: rank the whole catalog by the user's intent
     (mood, length, era, popularity), the same weighted ranker used by onboarding."""
     answers = intent_to_onboarding_answers(intent)
+    catalog = state["catalog_with_features"]
+    # Apply genre filter BEFORE ranking so Planet Earth / documentary titles never
+    # slip through as "action" results. rank_by_preferences uses a genre hard-floor
+    # from the tone column, but that floor only works when the LLM correctly sets
+    # mood → thrilling. Applying apply_filters here adds defense in depth:
+    # include_genres is derived from the mood signal in _picks_for_intent, so this
+    # filter is always correct even when the LLM misses the mood tag.
+    include_genres = intent.get("include_genres") or []
+    if include_genres:
+        catalog = apply_filters(catalog, {"include_genres": include_genres})
     return rank_by_preferences(
-        state["catalog_with_features"],
+        catalog,
         answers,
         top_n=top_n,
         exclude_titles=exclude_titles,
@@ -235,8 +245,9 @@ def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     if picks.empty:
         return ChatResponse(reply=t("not_in_catalog", payload.lang))
 
-    # Keep answers short: the one-line reply plus the cards are enough. We do not
-    # attach a long explanation bubble (it tended to ramble and even critique its
-    # own picks). Per-show context lives in the card modal.
     cards = _to_rec_cards(picks)
+    # For Hebrew chats use a fixed warm reply instead of whatever the LLM generated,
+    # since the small LLM (8b) frequently produces stiff or grammatically odd Hebrew.
+    if payload.lang == "he":
+        result["reply"] = "הנה ההמלצות שביקשת. מקווה שתאהב. לעוד שאלות ובקשות אני כאן לרשותך"
     return ChatResponse(reply=result["reply"], recommendations=cards)

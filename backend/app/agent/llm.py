@@ -232,7 +232,8 @@ def _regex_parse(query: str) -> dict:
     elif re.search(
         r"\b(short|shorter|קצר|קצרות|קצרה|קצרים|mini|limited|פחות פרקים|fewer episodes"
         r"|not too many seasons|not many seasons|fewer seasons"
-        r"|לא הרבה עונות|לא יותר מדי עונות|לא הרבה פרקים)\b",
+        r"|לא הרבה עונות|לא יותר מדי עונות|לא הרבה פרקים)\b"
+        r"|עד\s+[1-4]\s+עונות|up\s+to\s+[1-4]\s+seasons",
         q, re.IGNORECASE,
     ):
         length_pref = "short"
@@ -681,6 +682,8 @@ User: "more options" (prev_recs) -> {"action":"refine","reply":"Sure, more comin
 User: "I already watched the third one" (prev_recs) -> {"action":"swap_slot","reply":"Swapping the third.","intent":{"lang":"en","free_text":"watched #3"},"swap_slot_index":2}
 User: "fkjghslkdfjh" -> {"action":"chat","reply":"I didn't quite catch that, what are you in the mood to watch?","intent":{"lang":"en","free_text":"unclear"}}
 User: "אשמח להמלצות על סדרות מצחיקות" -> {"action":"search","reply":"בטח, הנה כמה אופציות:","intent":{"mood":["funny"],"lang":"he","free_text":"comedies"}}
+User: "אני רוצה סדרות אקשן" -> {"action":"search","reply":"בטח, הנה כמה:","intent":{"mood":["thrilling"],"lang":"he","free_text":"action series"}}
+User: "סדרות אימה" -> {"action":"search","reply":"בטח, הנה כמה:","intent":{"mood":["horror"],"lang":"he","free_text":"horror series"}}
 User: "יש לכם סדרות ישראליות?" -> {"action":"search","reply":"בטח, הנה כמה סדרות ישראליות:","intent":{"lang":"he","language_pref":"he","free_text":"israeli series"}}
 User: "קצרות יותר" (prev_recs) -> {"action":"refine","reply":"סבבה, משהו קצר יותר:","intent":{"length_pref":"short","lang":"he","free_text":"shorter"}}
 """
@@ -696,8 +699,9 @@ _ISRAELI_RE = re.compile(
 # Signals used by the offline fallback (no-LLM / LLM-failure path) to decide
 # whether a message is actually a recommendation request.
 _GREETING_RE = re.compile(
-    r"^\s*(hi|hello|hey|yo|howdy|sup|good\s+(morning|evening|afternoon))\b"
-    r"|שלום|היי|היי|מה\s+(נשמע|קורה|המצב|העניינים)",
+    r"^\s*(hi|hello|hey|yo|howdy|sup|good\s+(morning|evening|afternoon)"
+    r"|how\s+are\s+you|what'?s\s+up)\b"
+    r"|שלום|היי|הי|מה\s+(נשמע|קורה|המצב|העניינים|שלומך?|שלומו|שלומם|שלומנו|חדש)",
     re.IGNORECASE,
 )
 _REQUEST_VERB_RE = re.compile(
@@ -874,10 +878,31 @@ def chat_turn(
             "exclude_genres": [], "lang": detected_lang,
             "language_pref": "any", "free_text": last_user,
         }
+        gibberish_reply = (
+            "אני לא יכול לעזור לך כי הנתונים לא מופיעים לי בדטה סטס"
+            if detected_lang == "he"
+            else t("rephrase", "en")
+        )
         return {
             "action": "chat",
             "intent": base_intent,
-            "reply": t("rephrase", detected_lang),
+            "reply": gibberish_reply,
+            "follow_up": "",
+        }
+
+    # ── Greeting fast-path (no LLM) ────────────────────────────────────────────
+    # Fires for short greeting messages (≤ 8 words) so the LLM never generates
+    # a stiff or off-tone response for a simple "היי" / "מה שלומך".
+    if _GREETING_RE.search(last_user) and len(last_user.strip().split()) <= 8:
+        greeting_reply = (
+            "הכל בסדר תודה. במה יכול לעזור?"
+            if detected_lang == "he"
+            else "Doing great, thanks! What can I help you with?"
+        )
+        return {
+            "action": "chat",
+            "intent": {**fallback, "lang": detected_lang, "language_pref": "any"},
+            "reply": greeting_reply,
             "follow_up": "",
         }
 
@@ -1018,6 +1043,15 @@ def chat_turn(
                 combined = (intent.get("free_text", "") + " " + last_user)
                 if not _ISRAELI_RE.search(combined):
                     intent["language_pref"] = "any"
+
+            # Backfill mood from regex when the 8b LLM misses genre/mood words.
+            # The regex mood_map covers Hebrew genre words ("אקשן"→thrilling,
+            # "אימה"→horror) that the LLM often fails to classify correctly.
+            # Without this, "אני רוצה סדרות אקשן" could produce mood=[] and
+            # then _preference_picks has no genre floor to filter with.
+            if not intent.get("mood") and fallback.get("mood"):
+                intent["mood"] = fallback["mood"]
+
             result["intent"] = intent
 
             # Validate swap_slot_index when relevant
