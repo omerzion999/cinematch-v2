@@ -81,6 +81,40 @@ def add_internal_hyperlink(paragraph, anchor, text, size=11):
 
 # ── RTL helpers ───────────────────────────────────────────────────────────────
 
+def set_document_rtl(doc):
+    """Make the whole document NATIVELY right-to-left (like a Hebrew doc authored
+    in Word): set each section direction to RTL and the document default paragraph
+    direction to bidi. English/numeric table cells override this back to LTR so
+    their columns still read in logical order."""
+    for section in doc.sections:
+        sectPr = section._sectPr
+        if sectPr.find(qn("w:bidi")) is None:
+            sectPr.append(OxmlElement("w:bidi"))
+    docDefaults = doc.styles.element.find(qn("w:docDefaults"))
+    if docDefaults is not None:
+        pPrDefault = docDefaults.find(qn("w:pPrDefault"))
+        if pPrDefault is None:
+            pPrDefault = OxmlElement("w:pPrDefault")
+            docDefaults.insert(0, pPrDefault)
+        pPr = pPrDefault.find(qn("w:pPr"))
+        if pPr is None:
+            pPr = OxmlElement("w:pPr")
+            pPrDefault.append(pPr)
+        if pPr.find(qn("w:bidi")) is None:
+            pPr.append(OxmlElement("w:bidi"))
+
+
+def _set_ltr(paragraph):
+    """Force a paragraph left-to-right (used in English/numeric table cells so the
+    native RTL document default does not reorder them)."""
+    pPr = paragraph._p.get_or_add_pPr()
+    bidi = pPr.find(qn("w:bidi"))
+    if bidi is None:
+        bidi = OxmlElement("w:bidi")
+        pPr.append(bidi)
+    bidi.set(qn("w:val"), "0")
+
+
 def _rtl_paragraph(p):
     pPr = p._p.get_or_add_pPr()
     pPr.append(pPr.makeelement(qn("w:bidi"), {}))
@@ -136,8 +170,10 @@ def _cell_text(cell, text, bold, rtl):
     else:
         # English / numeric table: keep natural left-to-right order + alignment so
         # columns and numbers read logically (the bidi flip is what made them look
-        # reversed). Force a Latin font so digits/Latin glyphs render cleanly.
+        # reversed). Force LTR explicitly (the document default is RTL) + a Latin
+        # font so digits/Latin glyphs render cleanly.
         run.font.name = "Calibri"
+        _set_ltr(p)
         p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     return run
 
@@ -150,8 +186,13 @@ def table_from_df(doc, df, headers=None, rtl=True):
     display_headers = headers or cols
     t = doc.add_table(rows=1, cols=len(cols))
     t.style = "Light Grid Accent 1"
-    if rtl:
-        t._tbl.tblPr.append(t._tbl.tblPr.makeelement(qn("w:bidiVisual"), {}))
+    # Table visual direction. The document default is RTL, so an English/numeric
+    # table must EXPLICITLY opt out (bidiVisual val=0) to keep its columns in
+    # logical left-to-right order; Hebrew tables turn bidiVisual on.
+    bidiVisual = t._tbl.tblPr.makeelement(qn("w:bidiVisual"), {})
+    if not rtl:
+        bidiVisual.set(qn("w:val"), "0")
+    t._tbl.tblPr.append(bidiVisual)
     hdr = t.rows[0].cells
     for i, h in enumerate(display_headers):
         _cell_text(hdr[i], h, bold=True, rtl=rtl)
@@ -198,11 +239,15 @@ def build():
         rr = p.add_run(line)
         rr.font.size = Pt(13)
         _rtl_run(rr)
+        # Cover lines mix Hebrew with Latin/numbers; keep an LTR base so the course
+        # number and Latin tokens do not get reordered by the RTL document default.
+        _set_ltr(p)
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     doc.add_paragraph()
     for label, url in [("Live app:  ", "https://cinematch-ai-v2.onrender.com/"),
                        ("GitHub:  ", "https://github.com/omerzion999/cinematch-v2")]:
         p = doc.add_paragraph()
+        _set_ltr(p)
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = p.add_run(label)
         run.font.size = Pt(11)
@@ -442,6 +487,7 @@ def build():
         "ניהול עלויות ומגבלות קצב של מודל השפה בסקיילה.",
     ])
 
+    set_document_rtl(doc)
     doc.save(OUT)
     print(f"wrote {OUT}")
 
